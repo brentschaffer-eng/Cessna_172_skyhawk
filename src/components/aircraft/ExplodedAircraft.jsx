@@ -115,8 +115,11 @@ export function ExplodedAircraft({ selectedId, onSelect, reducedMotion, controls
     gear: <LandingGear />,
   }
 
+  const pitch = ((controls?.apPitch || 0) * Math.PI) / 180
+  const bank = (-(controls?.apBank || 0) * Math.PI) / 180
+
   return (
-    <group position={[0, 0.35, 0]}>
+    <group position={[0, 0.35, 0]} rotation={[pitch, 0, bank]} rotation-order="YXZ">
       {AIRCRAFT_PARTS.map((part) => (
         <PartGroup key={part.id} part={part} selected={selectedId === part.id} {...shared}>
           {renderers[part.id]}

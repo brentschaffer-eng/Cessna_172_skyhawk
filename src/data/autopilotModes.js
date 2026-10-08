@@ -11,6 +11,7 @@
  *   annunciation: string,
  *   tagline: string,
  *   sections: ModeSection[],
+ *   simulated?: boolean, // false = on the bezel for realism, not flown in the scenario
  * }} AutopilotMode
  */
 
@@ -37,7 +38,7 @@ export const AUTOPILOT_MODES = [
       },
       {
         heading: 'Watch out for',
-        body: 'Disconnect is normally done with the yoke button so you feel the airplane as you take it back. Know before you need it that the autopilot will not recover the airplane from an unusual attitude, and that it happily flies you into terrain if you have told it to.',
+        body: 'Disconnect is normally done with the red AP DISC button on the yoke so you feel the airplane as you take it back. The AP annunciation flashes yellow with an aural tone to confirm. Know before you need it that the autopilot will not recover the airplane from an unusual attitude, and that it happily flies you into terrain if you have told it to.',
       },
     ],
   },
@@ -75,7 +76,7 @@ export const AUTOPILOT_MODES = [
     sections: [
       {
         heading: 'What it commands',
-        body: 'HDG banks the airplane to capture and hold whatever heading the heading bug is set to. Move the bug and the airplane turns to follow it, using a bank angle limit rather than snapping over.',
+        body: 'HDG banks the airplane to capture and hold whatever heading the cyan heading bug is set to. Turn the HDG knob and the airplane turns to follow it, limited to about a standard-rate bank rather than snapping over. Push the knob to sync the bug to your current heading.',
       },
       {
         heading: 'What you see',
@@ -150,7 +151,7 @@ export const AUTOPILOT_MODES = [
     sections: [
       {
         heading: 'What it commands',
-        body: 'ALT immediately captures and holds the altitude you are at the instant you press it. Not the altitude in the preselect window, the one on the altimeter right now, rounded to the nearest increment.',
+        body: 'ALT immediately captures and holds the altitude you are at the instant you press it. Not the altitude in the preselect window, the one on the altimeter right now, rounded to the nearest 10 ft. NOSE UP and NOSE DN nudge that reference in 10 ft steps.',
       },
       {
         heading: 'What you see',
@@ -175,11 +176,11 @@ export const AUTOPILOT_MODES = [
     sections: [
       {
         heading: 'What it commands',
-        body: 'VS holds a vertical speed you select in feet per minute, using pitch alone. Ask for five hundred feet per minute up and the airplane will pitch to whatever attitude delivers that, regardless of what it costs in airspeed.',
+        body: 'VS holds a vertical speed in feet per minute, using pitch alone. When you press it, the reference syncs to whatever rate you have at that moment — press it in level flight and you get 0 FPM. Use NOSE UP and NOSE DN to change it in 100 fpm steps. The airplane will pitch to whatever attitude delivers that rate, regardless of what it costs in airspeed.',
       },
       {
         heading: 'What you see',
-        body: 'Green VS with the target rate. If an altitude is set in the preselect, ALTS arms in white alongside it, and the vertical mode transitions to ALT automatically at capture.',
+        body: 'Green VS with the target rate, and a cyan bug on the vertical speed tape. If an altitude is set in the preselect, ALTS arms in white alongside it; as you approach, the mode changes to a green ALTS while it levels off, then ALT.',
       },
       {
         heading: 'When a pilot uses it',
@@ -200,11 +201,11 @@ export const AUTOPILOT_MODES = [
     sections: [
       {
         heading: 'What it commands',
-        body: 'FLC holds an airspeed instead of a vertical rate. You set the target speed, the autopilot pitches to maintain it, and the vertical rate becomes whatever falls out of the power you have set. It climbs or descends toward the preselected altitude.',
+        body: 'FLC holds an airspeed instead of a vertical rate. Pressing it syncs the target to your current airspeed; NOSE UP slows the target by a knot, NOSE DN speeds it up. The autopilot pitches to hold that speed, and the vertical rate becomes whatever falls out of the power you have set.',
       },
       {
         heading: 'What you see',
-        body: 'Green FLC with the target airspeed, and ALTS armed in white for the preselected altitude. Direction is decided by the preselect: set an altitude above you and FLC climbs, set one below and it descends.',
+        body: 'Green FLC with the target airspeed, a cyan airspeed bug, and ALTS armed in white for the preselected altitude. Direction is decided by the preselect: set an altitude above you and FLC climbs, set one below and it descends. It will never climb away from a lower preselect.',
       },
       {
         heading: 'When a pilot uses it',
@@ -216,15 +217,94 @@ export const AUTOPILOT_MODES = [
       },
     ],
   },
+  {
+    id: 'VNV',
+    label: 'VNV',
+    axis: 'vertical',
+    annunciation: 'VPTH',
+    tagline: 'Vertical navigation along the flight plan profile',
+    simulated: false,
+    sections: [
+      {
+        heading: 'What it commands',
+        body: 'VNV couples the autopilot to the vertical profile computed from altitude constraints in the flight plan, so descents start at the right point and meet crossing restrictions without you calculating a top of descent.',
+      },
+      {
+        heading: 'What you see',
+        body: 'VPTH arms in white, then goes green when the descent path is intercepted. The target altitude for the next constraint appears in magenta beside the altitude tape. The preselected altitude still acts as a floor; VNV will not descend below it.',
+      },
+      {
+        heading: 'In this trainer',
+        body: 'The key is on the bezel exactly where it sits in the airplane, but this vectors-to-ILS scenario has no flight plan descent, so pressing it does nothing here.',
+      },
+    ],
+  },
+  {
+    id: 'BC',
+    label: 'BC',
+    axis: 'lateral',
+    annunciation: 'BC',
+    tagline: 'Localizer back course',
+    simulated: false,
+    sections: [
+      {
+        heading: 'What it commands',
+        body: 'BC flies a localizer back course, where the needle sensing is reversed relative to a normal front-course approach. The autopilot handles the reversal so the airplane still turns toward the course.',
+      },
+      {
+        heading: 'What you see',
+        body: 'BC arms and captures like LOC, but there is never a glideslope on a back course, so nothing arms vertically.',
+      },
+      {
+        heading: 'In this trainer',
+        body: 'The key is present for realism. The scenario is a front-course ILS, so BC is not simulated.',
+      },
+    ],
+  },
+  {
+    id: 'UP',
+    label: 'NOSE UP',
+    axis: 'vertical',
+    annunciation: '',
+    tagline: 'Raise the active vertical reference',
+    sections: [
+      {
+        heading: 'What it commands',
+        body: 'NOSE UP changes whatever the active vertical mode is holding. In PIT it raises the pitch reference half a degree. In VS it adds 100 fpm. In FLC it lowers the target airspeed by a knot, because the nose comes up to slow down. In ALT it raises the held altitude 10 ft.',
+      },
+      {
+        heading: 'When a pilot uses it',
+        body: 'Right after pressing VS or FLC, to dial in the rate or speed you actually want, since both modes start from whatever the airplane was doing at the moment you pressed them.',
+      },
+    ],
+  },
+  {
+    id: 'DN',
+    label: 'NOSE DN',
+    axis: 'vertical',
+    annunciation: '',
+    tagline: 'Lower the active vertical reference',
+    sections: [
+      {
+        heading: 'What it commands',
+        body: 'The mirror of NOSE UP. Lowers the pitch reference in PIT, subtracts 100 fpm in VS, adds a knot to the FLC target, and lowers the ALT reference 10 ft.',
+      },
+      {
+        heading: 'Watch out for',
+        body: 'It has no effect with the glideslope captured. The approach path is fixed, so the only way to change the descent is to leave GS.',
+      },
+    ],
+  },
 ]
 
 /** @type {Record<string, AutopilotMode>} */
 export const MODE_BY_ID = Object.fromEntries(AUTOPILOT_MODES.map((m) => [m.id, m]))
 
-/** Bezel layout: rows of button ids, mirroring the GFC 700 mode controller. */
+/** AFCS keys on the left edge of the Skyhawk's GDU PFD bezel, top to bottom, in pairs. */
 export const BEZEL_ROWS = [
-  ['AP', 'HDG', 'NAV', 'APR'],
-  ['FD', 'ALT', 'VS', 'FLC'],
+  ['AP', 'FD', 'APR', 'BC'],
+  ['HDG', 'ALT', 'VS', 'FLC'],
+  ['NAV', 'VNV', 'UP', 'DN'],
 ]
 
 /** Flattens a mode into the single string handed to speech synthesis. */

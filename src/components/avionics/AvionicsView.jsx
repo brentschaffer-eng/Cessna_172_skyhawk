@@ -1,13 +1,9 @@
-import { useReducer } from 'react'
+import { useEffect, useReducer, useRef } from 'react'
 import { MODE_BY_ID } from '../../data/autopilotModes.js'
-import {
-  INITIAL_AP_STATE,
-  autopilotReducer,
-  hasPendingCapture,
-} from '../../state/autopilotReducer.js'
+import { INITIAL_AP_STATE, autopilotReducer } from '../../state/autopilotReducer.js'
 import { GfcBezel } from './GfcBezel.jsx'
 import { ModeInfoPanel } from './ModeInfoPanel.jsx'
-import { PfdAnnunciator } from './PfdAnnunciator.jsx'
+import { Pfd } from './g1000/Pfd.jsx'
 
 const SMALL_BTN =
   'rounded-md border border-[var(--color-panel-edge)] bg-[var(--color-panel-raised)] px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 disabled:opacity-40'
@@ -15,12 +11,27 @@ const SMALL_BTN =
 export function AvionicsView({ selectedId, onSelect }) {
   const [ap, dispatch] = useReducer(autopilotReducer, INITIAL_AP_STATE)
   const mode = selectedId ? MODE_BY_ID[selectedId] : null
-  const pending = hasPendingCapture(ap)
+  
+  const lastTimeRef = useRef(performance.now())
+
+  useEffect(() => {
+    let frameId
+    const loop = (time) => {
+      const dt = (time - lastTimeRef.current) / 1000
+      lastTimeRef.current = time
+      if (dt < 0.2) {
+        dispatch({ type: 'tick', dt, pilot: { roll: 0, pitch: 0 } })
+      }
+      frameId = requestAnimationFrame(loop)
+    }
+    frameId = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(frameId)
+  }, [])
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
       <div className="flex min-w-0 flex-col gap-4">
-        <PfdAnnunciator ap={ap} />
+        <Pfd ap={ap} />
 
         <GfcBezel
           ap={ap}
@@ -37,7 +48,7 @@ export function AvionicsView({ selectedId, onSelect }) {
             type="button"
             className={SMALL_BTN}
             onClick={() =>
-              dispatch({ type: 'setSelectedAltitude', value: Math.max(1000, ap.selectedAltitude - 500) })
+              dispatch({ type: 'selectedAltitude', delta: -500 })
             }
             aria-label="Decrease selected altitude by 500 feet"
           >
@@ -50,7 +61,7 @@ export function AvionicsView({ selectedId, onSelect }) {
             type="button"
             className={SMALL_BTN}
             onClick={() =>
-              dispatch({ type: 'setSelectedAltitude', value: Math.min(14000, ap.selectedAltitude + 500) })
+              dispatch({ type: 'selectedAltitude', delta: 500 })
             }
             aria-label="Increase selected altitude by 500 feet"
           >
@@ -58,23 +69,20 @@ export function AvionicsView({ selectedId, onSelect }) {
           </button>
 
           <span className="ml-auto text-xs text-slate-500">
-            Now at {ap.currentAltitude.toLocaleString()} ft
+            Now at {Math.round(ap.altitude).toLocaleString()} ft
           </span>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-panel-edge)] bg-[var(--color-panel-raised)] p-3">
           <button
             type="button"
-            className={`${SMALL_BTN} ${pending ? 'border-[var(--color-instrument)] text-[var(--color-instrument)]' : ''}`}
-            onClick={() => dispatch({ type: 'capture' })}
-            disabled={!pending}
+            className={SMALL_BTN}
+            onClick={() => dispatch({ type: 'simRate', value: ap.simRate === 1 ? 4 : 1 })}
           >
-            Simulate intercept
+            {ap.simRate === 1 ? 'Speed up time (4x)' : 'Normal speed (1x)'}
           </button>
           <p className="min-w-40 flex-1 text-xs text-slate-500">
-            {pending
-              ? 'Something is armed. Fly the intercept to watch it capture and turn green.'
-              : 'Arm NAV, APR, VS or FLC to see an armed mode capture.'}
+            The flight is now simulated automatically in the background.
           </p>
           <button type="button" className={SMALL_BTN} onClick={() => dispatch({ type: 'reset' })}>
             Reset panel

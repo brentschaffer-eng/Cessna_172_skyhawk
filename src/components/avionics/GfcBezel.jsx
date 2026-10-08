@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BEZEL_ROWS, MODE_BY_ID } from '../../data/autopilotModes.js'
 
 /** Maps machine state onto the lamp each bezel key shows: off, white armed, green active. */
@@ -41,8 +42,7 @@ function ModeButton({ mode, lamp, focused, onPress, onFocus }) {
           onPress(mode.id)
           onFocus(mode.id)
         }}
-        title={mode.tagline}
-        className={`h-14 rounded-md border font-[family-name:var(--font-instrument)] text-sm font-bold tracking-wider transition-all active:translate-y-px ${LAMP_CLASS[lamp]} ${
+        className={`h-10 rounded-md border font-[family-name:var(--font-instrument)] text-xs font-bold tracking-wider transition-all active:translate-y-px ${LAMP_CLASS[lamp]} ${
           focused ? 'ring-2 ring-[var(--color-instrument)] ring-offset-2 ring-offset-[#0d1117]' : ''
         }`}
       >
@@ -56,35 +56,48 @@ function ModeButton({ mode, lamp, focused, onPress, onFocus }) {
 }
 
 export function GfcBezel({ ap, selectedId, onPress, onSelect }) {
+  const [collapsed, setCollapsed] = useState(false)
+
   return (
     <div className="rounded-xl border border-[var(--color-panel-edge)] bg-gradient-to-b from-[#1a1f26] to-[#0f1318] p-4 shadow-inner">
-      <div className="mb-3 flex items-baseline justify-between">
-        <span className="font-[family-name:var(--font-instrument)] text-xs tracking-[0.2em] text-slate-400">
+      <div 
+        className={`flex items-baseline justify-between cursor-pointer select-none ${collapsed ? '' : 'mb-3'}`}
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        <span className="font-[family-name:var(--font-instrument)] text-xs tracking-[0.2em] text-slate-400 flex items-center">
+          <span 
+            className="mr-2 text-[10px] transition-transform duration-200" 
+            style={{ transform: collapsed ? 'rotate(-90deg)' : 'rotate(0)' }}
+          >
+            ▼
+          </span>
           GARMIN GFC 700
         </span>
         <span className="text-[10px] tracking-widest text-slate-600 uppercase">Mode controller</span>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {BEZEL_ROWS.map((row, i) => (
-          <div key={i} className="grid grid-cols-4 gap-2 sm:gap-3">
-            {row.map((id) => (
-              <ModeButton
-                key={id}
-                mode={MODE_BY_ID[id]}
-                lamp={lampState(id, ap)}
-                focused={selectedId === id}
-                onPress={onPress}
-                onFocus={onSelect}
-              />
+      {!collapsed && (
+        <>
+          <div className="flex flex-col gap-1.5">
+            {BEZEL_ROWS.map((row, i) => (
+              <div key={i} className="grid grid-cols-4 gap-1.5">
+                {row.map((id) => (
+                  <ModeButton
+                    key={id}
+                    mode={MODE_BY_ID[id]}
+                    lamp={lampState(id, ap)}
+                    focused={selectedId === id}
+                    onPress={onPress}
+                    onFocus={onSelect}
+                  />
+                ))}
+              </div>
             ))}
           </div>
-        ))}
-      </div>
 
-      <p className="mt-3 border-t border-[var(--color-panel-edge)] pt-3 text-[11px] text-slate-500">
-        Pressing a key both drives the simulated flight director and opens its tutorial below.
-      </p>
+
+        </>
+      )}
     </div>
   )
 }
