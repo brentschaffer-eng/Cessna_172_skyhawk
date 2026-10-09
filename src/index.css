@@ -30,6 +30,22 @@
   }
 }
 
+@layer components {
+  /*
+   * Flight simulator page on large screens: an instrument column beside the 3D view.
+   * The column is never narrower than 450px (the Garmin PFD's minimum size). On larger screens it
+   * grows with the window, capped so the 3D view keeps about two-thirds of the width and so the
+   * 4:3 PFD plus the GFC 700 controller (~254px) still fit within one window height.
+   */
+  @media (min-width: 1024px) {
+    .sim-layout {
+      grid-template-columns:
+        clamp(450px, min(30vw - 16px, (100svh - 292px) * 4 / 3), 600px)
+        minmax(0, 1fr);
+    }
+  }
+}
+
 @layer utilities {
   /* Fades the bottom of scrolling text panels into the surrounding chrome. */
   .mask-fade-b {

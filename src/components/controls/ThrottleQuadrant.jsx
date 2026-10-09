@@ -27,7 +27,7 @@ const position = (rpm) => `calc(${KNOB_HALF_PX}px + (100% - ${2 * KNOB_HALF_PX}p
  * Drag anywhere on the lever column (pointer capture keeps the drag going off the control),
  * scroll the wheel over it, use the keyboard, or pick a preset.
  */
-export function ThrottleQuadrant({ rpm, onChange }) {
+export function ThrottleQuadrant({ rpm, onChange, variant = 'panel' }) {
   const trackRef = useRef(null)
   const sliderRef = useRef(null)
   const grabOffset = useRef(0)
@@ -102,23 +102,28 @@ export function ThrottleQuadrant({ rpm, onChange }) {
 
   const minorTicks = []
   for (let r = THROTTLE_MIN + MINOR_STEP; r < THROTTLE_MAX; r += MINOR_STEP) minorTicks.push(r)
+  // "glass" floats over the 3D view, so it lets the scene show through.
+  const surface =
+    variant === 'glass'
+      ? 'border-white/10 bg-black/20'
+      : 'border-[var(--color-panel-edge)] bg-[var(--color-panel)]'
 
   return (
-    <div className="flex min-h-0 w-full flex-1 select-none flex-col items-center gap-2 rounded-lg border border-[var(--color-panel-edge)] bg-[var(--color-panel)] p-2.5">
+    <div className={`flex min-h-0 w-full flex-1 select-none flex-col items-center gap-2 rounded-lg border p-2.5 ${surface}`}>
       <div className="flex w-full items-baseline justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Throttle</span>
-        <span className="text-[10px] text-slate-500">RPM</span>
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Throttle</span>
+        <span className="text-[10px] text-slate-400">RPM</span>
       </div>
       <output
         htmlFor="throttle-slider"
-        className="w-full rounded border border-[#2a313b] bg-black px-2 py-1 text-right font-[family-name:var(--font-instrument)] text-xl tabular-nums text-[var(--color-instrument)]"
+        className="w-full rounded border border-[#2a313b] bg-black/80 px-2 py-1 text-right font-[family-name:var(--font-instrument)] text-xl tabular-nums text-[var(--color-instrument)]"
       >
         {value.toLocaleString()}
       </output>
 
       {/* The lever grows to fill whatever height the console gives it. */}
       <div className="flex min-h-52 w-full flex-1 justify-center gap-1 lg:min-h-36">
-        <div className="relative w-11 font-[family-name:var(--font-instrument)] text-[10px] text-slate-400" aria-hidden="true">
+        <div className="relative w-11 font-[family-name:var(--font-instrument)] text-[10px] text-slate-300" aria-hidden="true">
           {minorTicks.map((r) => (
             <span
               key={r}
@@ -202,7 +207,7 @@ export function ThrottleQuadrant({ rpm, onChange }) {
           </button>
         ))}
       </div>
-      <p className="text-center text-[10px] leading-tight text-slate-500">Drag, scroll, or arrow keys</p>
+      <p className="text-center text-[10px] leading-tight text-slate-400">Drag, scroll, or arrow keys</p>
     </div>
   )
 }

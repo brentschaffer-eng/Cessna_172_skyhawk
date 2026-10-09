@@ -1,4 +1,4 @@
-import { Suspense, useState, useEffect, useRef } from 'react'
+import { Suspense, useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-three/drei'
 import { ExplodedAircraft } from './ExplodedAircraft.jsx'
@@ -150,7 +150,29 @@ function CameraRange({ far }) {
   return null
 }
 
-export function AircraftScene({ selectedId, onSelect, reducedMotion, controls, airportElevation, airportLat, airportLon }) {
+/**
+ * Shifts the projection centre left by half of `right` pixels, so the aircraft sits in the middle
+ * of the area left uncovered by an overlay docked on the right edge. The camera renders a wider
+ * virtual frame and shows only its right-hand part, keeping the image undistorted.
+ */
+function ViewInset({ right }) {
+  const camera = useThree((state) => state.camera)
+  const size = useThree((state) => state.size)
+  useLayoutEffect(() => {
+    if (right > 0 && size.width > right * 2) {
+      // r3f resets aspect to the canvas size on resize; this effect re-runs afterwards.
+      camera.aspect = (size.width + right) / size.height
+      camera.setViewOffset(size.width + right, size.height, right, 0, size.width, size.height)
+    } else {
+      camera.aspect = size.width / size.height
+      camera.clearViewOffset()
+    }
+    camera.updateProjectionMatrix()
+  }, [camera, size.width, size.height, right])
+  return null
+}
+
+export function AircraftScene({ selectedId, onSelect, reducedMotion, controls, airportElevation, airportLat, airportLon, viewInsetRight = 0 }) {
   const heightAboveField = Math.max(0, (controls?.apAltitude || 3000) - (airportElevation || 3557)) / 10
   const groundY = AIRCRAFT_GROUND_Y - heightAboveField
   // Visibility grows with height so the ground stays in view all the way to the horizon;
@@ -168,6 +190,7 @@ export function AircraftScene({ selectedId, onSelect, reducedMotion, controls, a
       <color attach="background" args={[SKY_COLOR]} />
       <fog attach="fog" args={[SKY_COLOR]} near={fogNear} far={fogFar} />
       <CameraRange far={fogFar * 1.5 + 1000} />
+      <ViewInset right={viewInsetRight} />
 
       <hemisphereLight args={['#dfeaff', '#5a5040', 0.45]} />
       <directionalLight

@@ -7,10 +7,11 @@ import { ThrottleQuadrant } from './controls/ThrottleQuadrant.jsx'
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion.js'
 import { RUNWAY } from '../sim/flightModel.js'
 
-const SMALL_BTN =
-  'rounded-md border border-[var(--color-panel-edge)] bg-[var(--color-panel-raised)] px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 disabled:opacity-40'
 const COMPACT_BTN =
   'rounded-md border border-[#3a424d] bg-gradient-to-b from-[#2b323b] to-[#1c2229] px-2 py-1 font-[family-name:var(--font-instrument)] text-[11px] font-bold text-slate-200 transition-colors hover:border-slate-500 active:translate-y-px'
+
+/** Space the throttle console occupies at the 3D view's right edge (its width plus margin). */
+const THROTTLE_CONSOLE_PX = 168
 
 // lat/lon is the threshold of each airport's longest runway (OurAirports data); heading is TRUE.
 const AIRPORTS = [
@@ -118,10 +119,10 @@ export function FlightSimView() {
   }
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-[1600px] flex-col px-4 py-3 sm:px-6 lg:h-svh">
+    <div className="flex min-h-svh w-full flex-col px-4 py-3 sm:px-6 lg:h-svh">
       <main className="min-h-0 flex-1">
-        {/* On large screens the three columns fill exactly one window height, so nothing scrolls. */}
-        <div className="grid gap-4 lg:h-full lg:grid-cols-[450px_172px_minmax(0,1fr)]">
+        {/* Large screens: instruments on the left (see .sim-layout), the 3D view takes the rest, about two-thirds, at full height. */}
+        <div className="sim-layout grid gap-4 lg:h-full">
           <div className="flex min-w-0 flex-col gap-3">
             <Pfd ap={ap} />
             <GfcBezel
@@ -172,28 +173,14 @@ export function FlightSimView() {
             </GfcBezel>
           </div>
 
-          <section
-            aria-labelledby="flight-controls-title"
-            className="grid min-h-0 grid-cols-[180px_minmax(0,1fr)] content-start gap-3 rounded-xl border border-[var(--color-panel-edge)] bg-[var(--color-panel-raised)] p-3 lg:flex lg:flex-col"
-          >
-            <h2 id="flight-controls-title" className="col-span-2 text-xs font-semibold text-slate-200">Flight Controls</h2>
-
-            <ThrottleQuadrant rpm={ap.rpm} onChange={(value) => dispatch({ type: 'rpm', value })} />
-
-            <div className="flex flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Flaps</span>
-                <button type="button" aria-pressed={flapsDown} className={SMALL_BTN + ' w-full'} onClick={() => setFlapsDown(!flapsDown)}>
-                  {flapsDown ? '▼ Down' : '▲ Up'}
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-1">
-                <label htmlFor="departure-airport" className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Airport</label>
-                <select 
-                  id="departure-airport"
-                  className={SMALL_BTN + ' w-full bg-[#05080c] px-2'} 
-                  value={airport.id} 
+          <div className="relative min-h-[520px] w-full overflow-hidden rounded-xl border border-[var(--color-panel-edge)] bg-[#6ba3ff] lg:h-full lg:min-h-0">
+            {/* Overlays: the 3D view stays the centrepiece; controls float over its edges. */}
+            <div className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-3" style={{ paddingRight: THROTTLE_CONSOLE_PX }}>
+              <label className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/20 bg-slate-950/45 py-1 pl-3 pr-1 text-white shadow-lg backdrop-blur-md">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Airport</span>
+                <select
+                  className="cursor-pointer rounded-full bg-transparent py-1 pl-1 pr-2 text-xs font-semibold text-white outline-none hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-[var(--color-instrument)]"
+                  value={airport.id}
                   onChange={e => {
                     const a = AIRPORTS.find(a => a.id === e.target.value)
                     setAirport(a)
@@ -201,24 +188,47 @@ export function FlightSimView() {
                     dispatch({ type: 'selectedAltitude', delta: (Math.ceil(a.elevation / 500) * 500 + 2000) - INITIAL_AP_STATE.selectedAltitude })
                   }}
                 >
-                  {AIRPORTS.map(a => <option key={a.id} value={a.id} className="bg-[var(--color-panel-raised)]">{a.name}</option>)}
+                  {AIRPORTS.map(a => <option key={a.id} value={a.id} className="bg-[var(--color-panel-raised)] text-slate-100">{a.name}</option>)}
                 </select>
-              </div>
-            </div>
-          </section>
+              </label>
 
-          <div className="relative min-h-[500px] w-full overflow-hidden rounded-xl border border-[var(--color-panel-edge)] bg-[#6ba3ff] lg:h-full lg:min-h-0">
-            <button 
-              onClick={() => setShowMap(true)}
-              className="absolute top-4 right-4 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-md transition-colors hover:bg-white/40 shadow-lg border border-white/30"
-              title="View Map"
+              <button 
+                type="button"
+                onClick={() => setShowMap(true)}
+                className="pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-white/20 bg-slate-950/45 px-3 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-colors hover:bg-slate-950/65"
+                title="View map"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon>
+                  <line x1="9" y1="3" x2="9" y2="18"></line>
+                  <line x1="15" y1="6" x2="15" y2="21"></line>
+                </svg>
+                Map
+              </button>
+            </div>
+
+            <section
+              aria-label="Flight controls"
+              className="pointer-events-none absolute inset-y-3 right-3 z-20 flex items-center"
+              style={{ width: THROTTLE_CONSOLE_PX - 12 }}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon>
-                <line x1="9" y1="3" x2="9" y2="18"></line>
-                <line x1="15" y1="6" x2="15" y2="21"></line>
-              </svg>
-            </button>
+              <div className="pointer-events-auto flex h-full max-h-[620px] w-full flex-col gap-2 rounded-xl border border-white/15 bg-slate-950/45 p-2 shadow-2xl backdrop-blur-md">
+                <ThrottleQuadrant variant="glass" rpm={ap.rpm} onChange={(value) => dispatch({ type: 'rpm', value })} />
+                <button
+                  type="button"
+                  aria-pressed={flapsDown}
+                  onClick={() => setFlapsDown(!flapsDown)}
+                  className={`flex items-center justify-between rounded-lg border px-2.5 py-2 text-xs font-semibold transition-colors ${
+                    flapsDown
+                      ? 'border-[var(--color-instrument)] bg-[var(--color-instrument)]/15 text-[var(--color-instrument)]'
+                      : 'border-white/15 bg-black/30 text-slate-200 hover:border-white/40'
+                  }`}
+                >
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Flaps</span>
+                  <span>{flapsDown ? '▼ Down' : '▲ Up'}</span>
+                </button>
+              </div>
+            </section>
 
             {showMap && (
               <MapModal
@@ -238,6 +248,7 @@ export function FlightSimView() {
                 airportElevation={airport.elevation}
                 airportLat={airport.lat}
                 airportLon={airport.lon}
+                viewInsetRight={THROTTLE_CONSOLE_PX}
               />
             </Suspense>
           </div>
