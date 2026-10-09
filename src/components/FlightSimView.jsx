@@ -3,11 +3,14 @@ import { INITIAL_AP_STATE, autopilotReducer } from '../state/autopilotReducer.js
 import { Pfd } from './avionics/g1000/Pfd.jsx'
 import { GfcBezel } from './avionics/GfcBezel.jsx'
 import { AircraftScene } from './aircraft/AircraftScene.jsx'
+import { ThrottleQuadrant } from './controls/ThrottleQuadrant.jsx'
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion.js'
 import { RUNWAY } from '../sim/flightModel.js'
 
 const SMALL_BTN =
   'rounded-md border border-[var(--color-panel-edge)] bg-[var(--color-panel-raised)] px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 disabled:opacity-40'
+const COMPACT_BTN =
+  'rounded-md border border-[#3a424d] bg-gradient-to-b from-[#2b323b] to-[#1c2229] px-2 py-1 font-[family-name:var(--font-instrument)] text-[11px] font-bold text-slate-200 transition-colors hover:border-slate-500 active:translate-y-px'
 
 // lat/lon is the threshold of each airport's longest runway (OurAirports data); heading is TRUE.
 const AIRPORTS = [
@@ -115,112 +118,96 @@ export function FlightSimView() {
   }
 
   return (
-    <div className="mx-auto flex min-h-svh max-w-[1600px] flex-col px-4 pb-6 sm:px-6">
-      <main className="flex-1 mt-6">
-        <div className="grid gap-6 lg:grid-cols-[450px_minmax(0,1fr)] items-start">
-          <div className="flex min-w-0 flex-col gap-4">
+    <div className="mx-auto flex min-h-svh max-w-[1600px] flex-col px-4 py-3 sm:px-6 lg:h-svh">
+      <main className="min-h-0 flex-1">
+        {/* On large screens the three columns fill exactly one window height, so nothing scrolls. */}
+        <div className="grid gap-4 lg:h-full lg:grid-cols-[450px_172px_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col gap-3">
             <Pfd ap={ap} />
             <GfcBezel
               ap={ap}
               selectedId={null}
               onPress={(id) => dispatch({ type: 'press', id })}
               onSelect={() => {}}
-            />
-
-            <div className="flex flex-col gap-4 rounded-xl border border-[var(--color-panel-edge)] bg-[var(--color-panel-raised)] p-4">
-              <h2 className="text-sm font-semibold text-slate-200">Manual Flight Controls</h2>
-              
-              <div className="grid grid-cols-[auto_auto_1fr] items-end gap-x-4 gap-y-4">
+            >
+              <div className="grid grid-cols-2 gap-6">
                 <div className="flex flex-col gap-1">
-                  <span className="text-xs text-slate-400">Altitude Preselect</span>
-                  <div className="flex items-center gap-2">
-                    <button type="button" className={SMALL_BTN} onClick={() => dispatch({ type: 'selectedAltitude', delta: -500 })}>
+                  <div className="flex items-baseline justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Alt Sel</span>
+                    <span className="font-[family-name:var(--font-instrument)] text-[10px] text-slate-500" title="Target vertical speed">
+                      VS {ap.vsRef > 0 ? '+' : ''}{ap.vsRef} FPM
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-1">
+                    <button type="button" className={COMPACT_BTN} aria-label="Altitude preselect down 500 feet" onClick={() => dispatch({ type: 'selectedAltitude', delta: -500 })}>
                       −500
                     </button>
-                    <span className="font-[family-name:var(--font-instrument)] text-sm text-[var(--color-instrument)] w-14 text-center">
+                    <span className="font-[family-name:var(--font-instrument)] text-sm text-[var(--color-instrument)] text-center">
                       {ap.selectedAltitude.toLocaleString()}
                     </span>
-                    <button type="button" className={SMALL_BTN} onClick={() => dispatch({ type: 'selectedAltitude', delta: 500 })}>
+                    <button type="button" className={COMPACT_BTN} aria-label="Altitude preselect up 500 feet" onClick={() => dispatch({ type: 'selectedAltitude', delta: 500 })}>
                       +500
                     </button>
                   </div>
                 </div>
 
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-slate-400">Target VS</span>
-                  <span className="font-[family-name:var(--font-instrument)] text-sm text-[var(--color-instrument)] py-1">
-                    {ap.vsRef > 0 ? '+' : ''}{ap.vsRef} FPM
-                  </span>
-                </div>
-
-                <div className="flex flex-col gap-1 ml-auto">
-                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Throttle</span>
-                  <div className="relative h-8 w-28 bg-[#0d1117] rounded-l-lg border-y border-l border-[#3a424d] shadow-inner flex items-center">
-                     <div 
-                       className="absolute h-3 bg-gradient-to-b from-slate-300 via-slate-100 to-slate-500 shadow-[inset_0_-1px_2px_rgba(0,0,0,0.5)] right-0" 
-                       style={{ width: `calc(100% - ${((ap.rpm - 700) / 2000) * 100}%)` }} 
-                     />
-                     <div 
-                       className="pointer-events-none absolute h-10 w-6 rounded-md bg-gradient-to-r from-[#111] to-[#333] border border-slate-600 shadow-[2px_0_5px_rgba(0,0,0,0.5)] z-10 flex items-center justify-center"
-                       style={{ left: `calc(${((ap.rpm - 700) / 2000) * 100}% - 12px)` }}
-                     >
-                       <div className="w-1 h-6 flex flex-col justify-between opacity-30">
-                         <div className="w-full h-[1px] bg-white"></div>
-                         <div className="w-full h-[1px] bg-white"></div>
-                         <div className="w-full h-[1px] bg-white"></div>
-                       </div>
-                     </div>
-                     <input 
-                       type="range" min="700" max="2700" step="10" value={ap.rpm} 
-                       onChange={(e) => dispatch({ type: 'rpm', value: parseFloat(e.target.value) })}
-                       className="absolute inset-0 w-full opacity-0 cursor-pointer z-20"
-                     />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs text-slate-400">Heading Bug</span>
-                  <div className="flex items-center gap-2">
-                    <button type="button" className={SMALL_BTN} onClick={() => dispatch({ type: 'headingBug', delta: -5 })}>
+                <div className="relative flex flex-col gap-1 before:absolute before:inset-y-0 before:-left-3 before:w-px before:bg-[#262d38]">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Heading Bug</span>
+                  <div className="flex items-center justify-between gap-1">
+                    <button type="button" className={COMPACT_BTN} aria-label="Heading bug left 5 degrees" onClick={() => dispatch({ type: 'headingBug', delta: -5 })}>
                       −5°
                     </button>
-                    <span className="font-[family-name:var(--font-instrument)] text-sm text-[var(--color-instrument)] w-8 text-center">
+                    <span className="font-[family-name:var(--font-instrument)] text-sm text-[var(--color-instrument)] text-center">
                       {ap.headingBug.toString().padStart(3, '0')}°
                     </span>
-                    <button type="button" className={SMALL_BTN} onClick={() => dispatch({ type: 'headingBug', delta: 5 })}>
+                    <button type="button" className={COMPACT_BTN} aria-label="Heading bug right 5 degrees" onClick={() => dispatch({ type: 'headingBug', delta: 5 })}>
                       +5°
                     </button>
-                    <button type="button" className={SMALL_BTN} onClick={() => dispatch({ type: 'headingSync' })}>
+                    <button type="button" className={COMPACT_BTN} onClick={() => dispatch({ type: 'headingSync' })}>
                       Sync
                     </button>
                   </div>
                 </div>
-
-                <div className="flex flex-col gap-1 col-span-2 ml-auto">
-                  <span className="text-xs text-slate-400">Location & Config</span>
-                  <div className="flex items-center gap-2">
-                    <button className={SMALL_BTN} onClick={() => setFlapsDown(!flapsDown)}>
-                      Flaps {flapsDown ? '▼' : '▲'}
-                    </button>
-                    <select 
-                      className={SMALL_BTN + ' bg-[#05080c]'} 
-                      value={airport.id} 
-                      onChange={e => {
-                        const a = AIRPORTS.find(a => a.id === e.target.value)
-                        setAirport(a)
-                        dispatch(lineUpAction(a))
-                        dispatch({ type: 'selectedAltitude', delta: (Math.ceil(a.elevation / 500) * 500 + 2000) - INITIAL_AP_STATE.selectedAltitude })
-                      }}
-                    >
-                      {AIRPORTS.map(a => <option key={a.id} value={a.id} className="bg-[var(--color-panel-raised)]">{a.name}</option>)}
-                    </select>
-                  </div>
-                </div>
               </div>
-            </div>
+            </GfcBezel>
           </div>
 
-          <div className="relative overflow-hidden rounded-xl border border-[var(--color-panel-edge)] bg-[#6ba3ff] min-h-[500px] h-[calc(100svh-120px)] w-full">
+          <section
+            aria-labelledby="flight-controls-title"
+            className="grid min-h-0 grid-cols-[180px_minmax(0,1fr)] content-start gap-3 rounded-xl border border-[var(--color-panel-edge)] bg-[var(--color-panel-raised)] p-3 lg:flex lg:flex-col"
+          >
+            <h2 id="flight-controls-title" className="col-span-2 text-xs font-semibold text-slate-200">Flight Controls</h2>
+
+            <ThrottleQuadrant rpm={ap.rpm} onChange={(value) => dispatch({ type: 'rpm', value })} />
+
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Flaps</span>
+                <button type="button" aria-pressed={flapsDown} className={SMALL_BTN + ' w-full'} onClick={() => setFlapsDown(!flapsDown)}>
+                  {flapsDown ? '▼ Down' : '▲ Up'}
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label htmlFor="departure-airport" className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Airport</label>
+                <select 
+                  id="departure-airport"
+                  className={SMALL_BTN + ' w-full bg-[#05080c] px-2'} 
+                  value={airport.id} 
+                  onChange={e => {
+                    const a = AIRPORTS.find(a => a.id === e.target.value)
+                    setAirport(a)
+                    dispatch(lineUpAction(a))
+                    dispatch({ type: 'selectedAltitude', delta: (Math.ceil(a.elevation / 500) * 500 + 2000) - INITIAL_AP_STATE.selectedAltitude })
+                  }}
+                >
+                  {AIRPORTS.map(a => <option key={a.id} value={a.id} className="bg-[var(--color-panel-raised)]">{a.name}</option>)}
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <div className="relative min-h-[500px] w-full overflow-hidden rounded-xl border border-[var(--color-panel-edge)] bg-[#6ba3ff] lg:h-full lg:min-h-0">
             <button 
               onClick={() => setShowMap(true)}
               className="absolute top-4 right-4 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-md transition-colors hover:bg-white/40 shadow-lg border border-white/30"

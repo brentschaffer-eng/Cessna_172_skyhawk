@@ -34,34 +34,35 @@ const LAMP_CLASS = {
 
 function ModeButton({ mode, lamp, focused, onPress, onFocus }) {
   return (
-    <div className="flex flex-col gap-1">
-      <button
-        type="button"
-        aria-pressed={lamp !== 'off'}
-        onClick={() => {
-          onPress(mode.id)
-          onFocus(mode.id)
-        }}
-        className={`h-10 rounded-md border font-[family-name:var(--font-instrument)] text-xs font-bold tracking-wider transition-all active:translate-y-px ${LAMP_CLASS[lamp]} ${
-          focused ? 'ring-2 ring-[var(--color-instrument)] ring-offset-2 ring-offset-[#0d1117]' : ''
-        }`}
-      >
-        {mode.label}
-      </button>
-      <span className="text-center text-[10px] text-slate-500">
-        {lamp === 'armed' ? 'ARMED' : lamp === 'active' ? 'ACTIVE' : '\u00a0'}
-      </span>
-    </div>
+    <button
+      type="button"
+      aria-pressed={lamp !== 'off'}
+      aria-label={lamp === 'off' ? mode.label : `${mode.label}, ${lamp}`}
+      onClick={() => {
+        onPress(mode.id)
+        onFocus(mode.id)
+      }}
+      className={`flex h-10 flex-col items-center justify-center rounded-md border font-[family-name:var(--font-instrument)] text-xs font-bold tracking-wider transition-all active:translate-y-px ${LAMP_CLASS[lamp]} ${
+        focused ? 'ring-2 ring-[var(--color-instrument)] ring-offset-2 ring-offset-[#0d1117]' : ''
+      }`}
+    >
+      <span className="leading-tight">{mode.label}</span>
+      {lamp !== 'off' && (
+        <span className="text-[8px] font-semibold leading-none tracking-widest opacity-80" aria-hidden="true">
+          {lamp === 'armed' ? 'ARMED' : 'ACTIVE'}
+        </span>
+      )}
+    </button>
   )
 }
 
-export function GfcBezel({ ap, selectedId, onPress, onSelect }) {
+export function GfcBezel({ ap, selectedId, onPress, onSelect, children }) {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
-    <div className="rounded-xl border border-[var(--color-panel-edge)] bg-gradient-to-b from-[#1a1f26] to-[#0f1318] p-4 shadow-inner">
+    <div className="rounded-xl border border-[var(--color-panel-edge)] bg-gradient-to-b from-[#1a1f26] to-[#0f1318] p-3 shadow-inner">
       <div 
-        className={`flex items-baseline justify-between cursor-pointer select-none ${collapsed ? '' : 'mb-3'}`}
+        className={`flex items-baseline justify-between cursor-pointer select-none ${collapsed ? '' : 'mb-2'}`}
         onClick={() => setCollapsed(!collapsed)}
       >
         <span className="font-[family-name:var(--font-instrument)] text-xs tracking-[0.2em] text-slate-400 flex items-center">
@@ -95,7 +96,7 @@ export function GfcBezel({ ap, selectedId, onPress, onSelect }) {
             ))}
           </div>
 
-
+          {children && <div className="mt-3 border-t border-[#262d38] pt-3">{children}</div>}
         </>
       )}
     </div>
