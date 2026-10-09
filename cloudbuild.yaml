@@ -1,0 +1,28 @@
+# Cloud Build trigger "cessna-trainer" runs this on every push to main, publishing https://beesone.ca/plane/.
+# It mirrors scripts/deploy-gcs-plane.ps1 and never deletes bucket content (no rsync deletion flag),
+# so older hashed assets stay available to browsers that still have the previous index.html.
+steps:
+  - id: install
+    name: 'node:22'
+    entrypoint: npm
+    args: ['ci', '--no-audit', '--no-fund']
+
+  - id: build
+    name: 'node:22'
+    entrypoint: npm
+    args: ['run', 'build:plane']
+
+  - id: upload
+    name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: bash
+    args:
+      - '-euo'
+      - 'pipefail'
+      - '-c'
+      - |
+        gcloud storage rsync --recursive dist gs://beesone.ca/plane
+        gcloud storage objects update gs://beesone.ca/plane/index.html --cache-control="no-cache, max-age=0"
+        gcloud storage objects update "gs://beesone.ca/plane/assets/**" --cache-control="public, max-age=31536000, immutable"
+
+options:
+  logging: CLOUD_LOGGING_ONLY

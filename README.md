@@ -38,7 +38,7 @@ Then open the URL Vite prints (usually http://localhost:5173).
 | `npm run build` | Production build into `dist/` using relative asset paths. |
 | `npm run build:plane` | Production build with the `/plane/` base path used on beesone.ca. |
 | `npm run preview` | Serve the built `dist/` folder locally. |
-| `npm run deploy:plane` | Build and upload to `gs://beesone.ca/plane` (requires `gcloud` access). |
+| `npm run deploy:plane` | Manually build and upload to `gs://beesone.ca/plane` (requires `gcloud` access; pushing to `main` does this automatically). |
 
 On Windows, use `npm.cmd` if PowerShell's execution policy blocks `npm`.
 
@@ -49,7 +49,8 @@ public/
   favicon.svg          App icon (also used on the beesone.ca dashboard card)
   assets/              Airport satellite imagery
 scripts/
-  deploy-gcs-plane.ps1 Google Cloud Storage deploy script
+  deploy-gcs-plane.ps1 Manual Google Cloud Storage deploy script
+cloudbuild.yaml        Automatic deploy on push to main (Cloud Build)
 src/
   components/
     FlightSimView.jsx  Main simulator screen
@@ -63,7 +64,7 @@ src/
 
 ## Deployment
 
-See [DEPLOYMENT.md](DEPLOYMENT.md). The app is hosted under the `plane` prefix of the `gs://beesone.ca` bucket and listed on the beesone.ca dashboard.
+Pushing to `main` deploys automatically: Cloud Build runs [cloudbuild.yaml](cloudbuild.yaml), building the app and publishing it to https://beesone.ca/plane/ within a few minutes. See [DEPLOYMENT.md](DEPLOYMENT.md) for details and the optional manual deploy.
 
 ## Disclaimer
 
