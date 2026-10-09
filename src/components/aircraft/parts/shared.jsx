@@ -1,64 +1,81 @@
+import { useLayoutEffect, useRef } from 'react'
 import * as THREE from 'three'
 
-export const SKIN = { color: '#e9ecef', metalness: 0.35, roughness: 0.42 }
-export const SKIN_DARK = { color: '#aeb6bf', metalness: 0.4, roughness: 0.5 }
-export const RUBBER = { color: '#22262b', metalness: 0.05, roughness: 0.95 }
-export const STEEL = { color: '#7d8590', metalness: 0.75, roughness: 0.35 }
-export const ENGINE = { color: '#4a525c', metalness: 0.6, roughness: 0.5 }
+const gloss = { clearcoat: 0.75, clearcoatRoughness: 0.1 }
 
-const UP = new THREE.Vector3(0, 1, 0)
+export const PAINT = { color: '#f5f7fa', metalness: 0.02, roughness: 0.3, ...gloss }
+export const NAVY = { color: '#1d3a72', metalness: 0.05, roughness: 0.32, ...gloss }
+export const GOLD = { color: '#c79b32', metalness: 0.4, roughness: 0.32, ...gloss }
+export const GLASS = { color: '#0b1822', metalness: 0.1, roughness: 0.03, clearcoat: 1, clearcoatRoughness: 0.02 }
+export const SEAM = { color: '#9ea8b3', metalness: 0.05, roughness: 0.55 }
+export const RUBBER = { color: '#1a1d21', metalness: 0, roughness: 0.9 }
+export const STEEL = { color: '#8c949d', metalness: 0.85, roughness: 0.32 }
+export const CHROME = { color: '#e6ebf0', metalness: 1, roughness: 0.1 }
+export const ALUMINIUM = { color: '#c3c9cf', metalness: 0.9, roughness: 0.28 }
+export const ENGINE_GREY = { color: '#4e5862', metalness: 0.55, roughness: 0.45 }
+export const CYLINDER = { color: '#6e7780', metalness: 0.7, roughness: 0.4 }
+export const EXHAUST = { color: '#6b5546', metalness: 0.75, roughness: 0.55 }
+export const SATIN_BLACK = { color: '#24282d', metalness: 0.3, roughness: 0.55 }
+export const PROP_TIP = { color: '#f2c230', metalness: 0.1, roughness: 0.4 }
 
 /**
- * A cylinder stretched between two points — used for wing struts and gear legs,
- * which are far easier to express as endpoints than as position plus rotation.
+ * Mesh with a physical material. `decal` skins sit a few millimetres proud of the body,
+ * render both faces and win the depth test so they never shimmer. `baseOpacity` is read by
+ * ExplodedAircraft's fade pass; it is written to userData so the part's highlight state survives.
  */
-export function Strut({ from, to, radius = 0.05, radiusTop, material = STEEL }) {
-  const a = new THREE.Vector3(...from)
-  const b = new THREE.Vector3(...to)
-  const dir = new THREE.Vector3().subVectors(b, a)
-  const length = dir.length()
-  const quaternion = new THREE.Quaternion().setFromUnitVectors(UP, dir.clone().normalize())
-  const mid = a.clone().add(b).multiplyScalar(0.5)
+export function Part({ geometry, material = PAINT, decal = false, baseOpacity, map, children, ...props }) {
+  const materialRef = useRef()
+  useLayoutEffect(() => {
+    if (baseOpacity !== undefined) materialRef.current.userData.baseOpacity = baseOpacity
+  }, [baseOpacity])
 
   return (
-    <mesh position={mid} quaternion={quaternion} castShadow>
-      <cylinderGeometry args={[radiusTop ?? radius, radius, length, 10]} />
-      <meshStandardMaterial {...material} transparent />
+    <mesh geometry={geometry} castShadow={!decal} receiveShadow {...props}>
+      {children}
+      <meshPhysicalMaterial
+        ref={materialRef}
+        {...material}
+        map={map ?? null}
+        transparent
+        alphaTest={map ? 0.4 : 0}
+        side={decal ? THREE.DoubleSide : THREE.FrontSide}
+        polygonOffset={decal}
+        polygonOffsetFactor={decal ? -2 : 0}
+        polygonOffsetUnits={decal ? -4 : 0}
+      />
+    </mesh>
+  )
+}
+
+/** Emissive lens for navigation, beacon and landing lights (excluded from the highlight glow). */
+export function Lamp({ colour, intensity = 2, radius = 0.04, ...props }) {
+  return (
+    <mesh {...props}>
+      <sphereGeometry args={[radius, 16, 12]} />
+      <meshStandardMaterial color={colour} emissive={colour} emissiveIntensity={intensity} toneMapped={false} transparent />
     </mesh>
   )
 }
 
 /**
- * Builds an aerofoil-ish slab: a box with the leading edge rounded off by a
- * half-cylinder, which reads far more like a wing than a bare box does.
+ * Tube stretched between two points — struts, legs, pipes. `flatten` squashes it sideways into
+ * a streamlined section whose long axis stays aligned with the airflow (+Z).
  */
-export function AirfoilSlab({ span, chord, thickness, material = SKIN, ...props }) {
-  return (
-    <group {...props}>
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[span, thickness, chord]} />
-        <meshStandardMaterial {...material} transparent />
-      </mesh>
-      <mesh position={[0, 0, -chord / 2]} rotation={[0, 0, Math.PI / 2]} castShadow>
-        <cylinderGeometry args={[thickness / 2, thickness / 2, span, 12]} />
-        <meshStandardMaterial {...material} transparent />
-      </mesh>
-    </group>
-  )
-}
-
-/** Extrudes a flat profile (points in the longitudinal/vertical plane) into a tail surface. */
-export function ExtrudedSurface({ points, thickness, material = SKIN, ...props }) {
-  const shape = new THREE.Shape()
-  points.forEach(([x, y], i) => (i === 0 ? shape.moveTo(x, y) : shape.lineTo(x, y)))
-  shape.closePath()
+export function Strut({ from, to, radius = 0.04, radiusTop, flatten = 1, material = STEEL, segments = 18 }) {
+  const a = new THREE.Vector3(...from)
+  const b = new THREE.Vector3(...to)
+  const yAxis = b.clone().sub(a)
+  const length = yAxis.length()
+  yAxis.normalize()
+  const ref = Math.abs(yAxis.z) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 0, 1)
+  const zAxis = ref.sub(yAxis.clone().multiplyScalar(ref.dot(yAxis))).normalize()
+  const xAxis = new THREE.Vector3().crossVectors(yAxis, zAxis)
+  const quaternion = new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(xAxis, yAxis, zAxis))
 
   return (
-    <mesh {...props} castShadow>
-      <extrudeGeometry
-        args={[shape, { depth: thickness, bevelEnabled: false, curveSegments: 4 }]}
-      />
-      <meshStandardMaterial {...material} side={THREE.DoubleSide} transparent />
+    <mesh position={a.add(b).multiplyScalar(0.5)} quaternion={quaternion} scale={[flatten, 1, 1]} castShadow receiveShadow>
+      <cylinderGeometry args={[radiusTop ?? radius, radius, length, segments]} />
+      <meshPhysicalMaterial {...material} transparent />
     </mesh>
   )
 }

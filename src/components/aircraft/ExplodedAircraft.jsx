@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Html } from '@react-three/drei'
 import * as THREE from 'three'
 import { AIRCRAFT_PARTS } from '../../data/aircraftParts.js'
 import { Fuselage } from './parts/Fuselage.jsx'
@@ -92,13 +91,6 @@ function PartGroup({ part, selected, anySelected, onSelect, reducedMotion, child
       }}
     >
       {children}
-      {hovered && !selected && (
-        <Html center position={part.explode.map((v) => v * 0.6)} distanceFactor={14} zIndexRange={[10, 0]}>
-          <span className="pointer-events-none rounded bg-slate-900/90 px-2 py-1 text-xs whitespace-nowrap text-slate-100 ring-1 ring-slate-600">
-            {part.label}
-          </span>
-        </Html>
-      )}
     </group>
   )
 }

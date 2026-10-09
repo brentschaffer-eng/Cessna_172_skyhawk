@@ -1,97 +1,154 @@
-import { useRef } from 'react'
+import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { AirfoilSlab, SKIN, Strut } from './shared.jsx'
+import { WING, WING_AIRFOIL, wingHingePoint, wingStation, wingSurfacePoint, wingTipStations } from './airframe.js'
+import { hingeFrame, linspace, mergeGeometries, stationPoint, surfaceGeometry } from './geometry.js'
+import { CHROME, GLASS, Lamp, PAINT, Part, SATIN_BLACK, STEEL, Strut } from './shared.jsx'
 
-const WING_Y = 0.95
-const LE_Z = -2.3
-const CHORD = 1.25
-const HINGE_Z = LE_Z + CHORD // trailing edge of the fixed wing box
-const SURFACE_CHORD = 0.42
-const DIHEDRAL = 0.03
-const FLAP_DOWN = 0.62 // ~35 degrees
-const AILERON_THROW = 0.34
+const FLAP_DOWN = THREE.MathUtils.degToRad(30)
+const AILERON_THROW = THREE.MathUtils.degToRad(20)
 
-/** A trailing-edge surface that hinges about the wing's rear spar line. */
-function ControlSurface({ side, innerX, outerX, targetAngle }) {
+const loft = (xs, sign, options, extra = []) =>
+  surfaceGeometry([...xs.map((x) => wingStation(sign * x)), ...extra], WING_AIRFOIL, { n: 36, ...options })
+
+/** Wing surface between two span positions, rebuilt in its hinge frame so it can rotate in place. */
+function controlSurface(sign, { inner, outer, hinge }, stations) {
+  const xs = linspace(inner, outer, stations)
+  const frame = hingeFrame(wingHingePoint(sign * inner, hinge), wingHingePoint(sign * outer, hinge))
+  const geometry = loft(xs, sign, { from: hinge, roundNose: true }).applyMatrix4(frame.inverse)
+  return { frame, geometry }
+}
+
+function buildWings() {
+  const { flap, aileron } = WING
+  const fixed = [
+    surfaceGeometry([-flap.inner, 0, flap.inner].map((x) => wingStation(x)), WING_AIRFOIL, { n: 36 }),
+  ]
+  for (const sign of [-1, 1]) {
+    fixed.push(
+      loft(linspace(flap.inner, flap.outer, 4), sign, { to: flap.hinge }),
+      loft([flap.outer, WING.breakX, aileron.inner], sign, {}),
+      loft(linspace(aileron.inner, aileron.outer, 6), sign, { to: aileron.hinge }),
+      loft([aileron.outer, WING.tipX], sign, {}, wingTipStations(sign)),
+    )
+  }
+  return {
+    fixed: mergeGeometries(fixed),
+    flaps: [-1, 1].map((sign) => ({ sign, ...controlSurface(sign, flap, 4) })),
+    ailerons: [-1, 1].map((sign) => ({ sign, ...controlSurface(sign, aileron, 6) })),
+  }
+}
+
+function HingedSurface({ frame, geometry, angle, slide = 0 }) {
   const ref = useRef()
   useFrame((_, delta) => {
-    if (!ref.current) return
-    ref.current.rotation.x = THREE.MathUtils.damp(ref.current.rotation.x, targetAngle, 5, delta)
+    const g = ref.current
+    if (!g) return
+    g.rotation.x = THREE.MathUtils.damp(g.rotation.x, angle, 5, delta)
+    // Fowler-style flaps also travel aft and down as they extend.
+    g.position.z = THREE.MathUtils.damp(g.position.z, slide, 5, delta)
+    g.position.y = THREE.MathUtils.damp(g.position.y, -slide * 0.3, 5, delta)
   })
-
-  const span = outerX - innerX
-  const centerX = side * (innerX + span / 2)
-
   return (
-    <group ref={ref} position={[centerX, 0, HINGE_Z]}>
-      <mesh position={[0, 0, SURFACE_CHORD / 2]} castShadow>
-        <boxGeometry args={[span, 0.07, SURFACE_CHORD]} />
-        <meshStandardMaterial {...SKIN} transparent />
-      </mesh>
+    <group position={frame.position} quaternion={frame.quaternion}>
+      <group ref={ref}>
+        <Part geometry={geometry} />
+      </group>
     </group>
   )
 }
 
-function WingPanel({ side, flapsDown, rollInput }) {
-  // Right aileron up means left aileron down; that opposition is the whole point.
-  const aileronAngle = rollInput * AILERON_THROW * -side
-
-  return (
-    <group rotation={[0, 0, side * DIHEDRAL]}>
-      <AirfoilSlab
-        span={4.7}
-        chord={CHORD}
-        thickness={0.16}
-        position={[side * 3.15, 0, LE_Z + CHORD / 2]}
-      />
-
-      {/* Wingtip cap with its navigation light */}
-      <mesh position={[side * 5.45, 0.02, LE_Z + CHORD / 2]} castShadow>
-        <boxGeometry args={[0.22, 0.14, CHORD * 0.85]} />
-        <meshStandardMaterial color="#cfd6dd" metalness={0.4} roughness={0.4} transparent />
-      </mesh>
-      <mesh position={[side * 5.56, 0.02, LE_Z + 0.2]}>
-        <sphereGeometry args={[0.07, 10, 10]} />
-        <meshStandardMaterial
-          color={side > 0 ? '#2ecc71' : '#e74c3c'}
-          emissive={side > 0 ? '#2ecc71' : '#e74c3c'}
-          emissiveIntensity={0.9}
-          transparent
-        />
-      </mesh>
-
-      <ControlSurface side={side} innerX={0.95} outerX={2.85} targetAngle={flapsDown ? FLAP_DOWN : 0} />
-      <ControlSurface side={side} innerX={3.0} outerX={5.2} targetAngle={aileronAngle} />
-    </group>
-  )
-}
+const toArray = (v) => [v.x, v.y, v.z]
 
 export function Wings({ flapsDown = false, rollInput = 0 }) {
+  const g = useMemo(buildWings, [])
+
   return (
-    <group position={[0, WING_Y, 0]}>
-      {/* Centre section carrying through above the cabin */}
-      <AirfoilSlab span={1.7} chord={CHORD} thickness={0.17} position={[0, 0, LE_Z + CHORD / 2]} />
+    <group>
+      <Part geometry={g.fixed} />
 
-      {[-1, 1].map((side) => (
-        <WingPanel key={side} side={side} flapsDown={flapsDown} rollInput={rollInput} />
+      {g.flaps.map(({ sign, frame, geometry }) => (
+        <HingedSurface
+          key={`flap${sign}`}
+          frame={frame}
+          geometry={geometry}
+          angle={flapsDown ? FLAP_DOWN : 0}
+          slide={flapsDown ? 0.12 : 0}
+        />
+      ))}
+      {g.ailerons.map(({ sign, frame, geometry }) => (
+        // Right aileron up means left aileron down; that opposition is what rolls the aircraft.
+        <HingedSurface key={`ail${sign}`} frame={frame} geometry={geometry} angle={rollInput * AILERON_THROW * -sign} />
       ))}
 
-      {/* Lift struts and jury struts, measured back to the fuselage in model space */}
-      {[-1, 1].map((side) => (
-        <group key={side}>
-          <Strut
-            from={[side * 0.52, -1.45, -1.45]}
-            to={[side * 2.85, -0.06, LE_Z + 0.95]}
-            radius={0.055}
-          />
-          <Strut
-            from={[side * 1.75, -0.78, -1.55]}
-            to={[side * 1.95, -0.06, LE_Z + 0.5]}
-            radius={0.028}
-          />
-        </group>
-      ))}
+      {[-1, 1].map((sign) => {
+        const strutTop = wingSurfacePoint(sign * 2.5, 0.28, false)
+        const tip = wingTipStations(sign)[2]
+        return (
+          <group key={sign}>
+            {/* Streamlined lift strut with its end fairings. */}
+            <Strut
+              from={[sign * 0.52, -0.42, -1.42]}
+              to={[strutTop.x, strutTop.y + 0.02, strutTop.z]}
+              radius={0.052}
+              flatten={0.38}
+              material={PAINT}
+            />
+            <mesh position={[strutTop.x, strutTop.y - 0.01, strutTop.z]} scale={[0.6, 0.5, 1.3]} castShadow>
+              <sphereGeometry args={[0.07, 16, 12]} />
+              <meshPhysicalMaterial {...PAINT} transparent />
+            </mesh>
+            <mesh position={[sign * 0.56, -0.42, -1.42]} scale={[0.5, 0.7, 1.4]} castShadow>
+              <sphereGeometry args={[0.07, 16, 12]} />
+              <meshPhysicalMaterial {...PAINT} transparent />
+            </mesh>
+
+            {/* Fuel filler cap near the root of each wing. */}
+            {(() => {
+              const p = wingSurfacePoint(sign * 1.0, 0.32, true)
+              return (
+                <mesh position={toArray(p)}>
+                  <cylinderGeometry args={[0.04, 0.045, 0.014, 20]} />
+                  <meshPhysicalMaterial {...CHROME} transparent />
+                </mesh>
+              )
+            })()}
+
+            {/* Position light (red left, green right) and white strobe, set into the rounded tip. */}
+            <Lamp colour={sign > 0 ? '#22e06b' : '#ff3030'} radius={0.035} position={toArray(stationPoint(tip, 0.15, 0))} />
+            <Lamp colour="#ffffff" radius={0.025} intensity={1.2} position={toArray(stationPoint(tip, 0.7, 0))} />
+          </group>
+        )
+      })}
+
+      {/* Left wing: landing/taxi light lens, stall-warning inlet and pitot tube. */}
+      {(() => {
+        const s = wingStation(-1.55)
+        return (
+          <mesh position={[-1.55, s.le[1] + 0.005, s.le[2] + 0.012]}>
+            <boxGeometry args={[0.32, 0.08, 0.02]} />
+            <meshPhysicalMaterial {...GLASS} color="#dfe8ef" emissive="#fff6d8" emissiveIntensity={0.4} transparent />
+          </mesh>
+        )
+      })()}
+      {(() => {
+        const s = wingStation(-1.0)
+        return (
+          <mesh position={[-1.0, s.le[1] - 0.005, s.le[2] + 0.006]}>
+            <boxGeometry args={[0.07, 0.02, 0.012]} />
+            <meshPhysicalMaterial {...SATIN_BLACK} transparent />
+          </mesh>
+        )
+      })()}
+      {(() => {
+        const p = wingSurfacePoint(-2.15, 0.2, false)
+        return (
+          <group>
+            <Strut from={[p.x, p.y + 0.02, p.z]} to={[p.x, p.y - 0.09, p.z - 0.05]} radius={0.012} flatten={0.6} />
+            <Strut from={[p.x, p.y - 0.09, p.z - 0.05]} to={[p.x, p.y - 0.09, p.z - 0.32]} radius={0.009} material={STEEL} />
+          </group>
+        )
+      })()}
     </group>
   )
 }
