@@ -47,13 +47,14 @@ export function AfcsStatusBox({ ap, apAlert, fd, lateralActive, lateralArmed, ve
         {flashVertical && (
           <rect x={x + 272} y={y + 2} width="126" height={h - 4} fill={activeColor} />
         )}
-        <T x={x + 290} y={y + 26} size={18} anchor="start" fill={flashVertical ? G.box : activeColor}>
+        <T x={x + 280} y={y + 26} size={18} anchor="start" fill={flashVertical ? G.box : activeColor}>
           {verticalActive}
         </T>
-        <T x={x + 340} y={y + 26} size={18} anchor="start" fill={flashVertical ? G.box : activeColor}>
+        {/* Right-aligned and slightly smaller so long references such as ↑1000FPM stay inside the box. */}
+        <T x={x + w - 6} y={y + 26} size={15} anchor="end" fill={flashVertical ? G.box : activeColor}>
           {reference}
         </T>
-        <T x={x + 290} y={y + 12} size={14} anchor="start" fill={armedColor}>
+        <T x={x + 280} y={y + 12} size={14} anchor="start" fill={armedColor}>
           {verticalArmed}
         </T>
       </g>

@@ -27,7 +27,7 @@ const position = (rpm) => `calc(${KNOB_HALF_PX}px + (100% - ${2 * KNOB_HALF_PX}p
  * Drag anywhere on the lever column (pointer capture keeps the drag going off the control),
  * scroll the wheel over it, use the keyboard, or pick a preset.
  */
-export function ThrottleQuadrant({ rpm, onChange, variant = 'panel' }) {
+export function ThrottleQuadrant({ rpm, onChange, variant = 'panel', showTitle = true }) {
   const trackRef = useRef(null)
   const sliderRef = useRef(null)
   const grabOffset = useRef(0)
@@ -110,19 +110,24 @@ export function ThrottleQuadrant({ rpm, onChange, variant = 'panel' }) {
 
   return (
     <div className={`flex min-h-0 w-full flex-1 select-none flex-col items-center gap-2 rounded-lg border p-2.5 ${surface}`}>
-      <div className="flex w-full items-baseline justify-between">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Throttle</span>
-        <span className="text-[10px] text-slate-400">RPM</span>
-      </div>
+      {showTitle && (
+        <div className="flex w-full items-baseline justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-300">Throttle</span>
+          <span className="text-[10px] text-slate-400">RPM</span>
+        </div>
+      )}
       <output
         htmlFor="throttle-slider"
-        className="w-full rounded border border-[#2a313b] bg-black/80 px-2 py-1 text-right font-[family-name:var(--font-instrument)] text-xl tabular-nums text-[var(--color-instrument)]"
+        className="relative w-full rounded border border-[#2a313b] bg-black/80 px-2 py-1 text-right font-[family-name:var(--font-instrument)] text-xl tabular-nums text-[var(--color-instrument)]"
       >
+        {!showTitle && (
+          <span className="absolute left-2 top-1/2 -translate-y-1/2 font-sans text-[9px] font-bold tracking-widest text-slate-500">RPM</span>
+        )}
         {value.toLocaleString()}
       </output>
 
       {/* The lever grows to fill whatever height the console gives it. */}
-      <div className="flex min-h-52 w-full flex-1 justify-center gap-1 lg:min-h-36">
+      <div className="flex min-h-36 w-full flex-1 justify-center gap-1">
         <div className="relative w-11 font-[family-name:var(--font-instrument)] text-[10px] text-slate-300" aria-hidden="true">
           {minorTicks.map((r) => (
             <span

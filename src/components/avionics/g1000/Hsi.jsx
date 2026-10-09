@@ -108,8 +108,9 @@ export function Hsi({ heading, track, headingBug, nav, source }) {
       <T x={HSI_CX - R - 50} y={HSI_CY - R} size={18} fill={needleColor}>
         {source}
       </T>
+      {/* Current heading; the heading bug is the cyan notch on the rose and the HEADING BUG knob readout. */}
       <T x={HSI_CX - R - 50} y={HSI_CY - R + 20} size={16} fill={G.cyan}>
-        HDG {pad3(headingBug)}
+        HDG {pad3(heading)}
       </T>
     </g>
   )

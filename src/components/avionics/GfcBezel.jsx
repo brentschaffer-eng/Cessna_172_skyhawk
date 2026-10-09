@@ -42,7 +42,7 @@ function ModeButton({ mode, lamp, focused, onPress, onFocus }) {
         onPress(mode.id)
         onFocus(mode.id)
       }}
-      className={`flex h-10 flex-col items-center justify-center rounded-md border font-[family-name:var(--font-instrument)] text-xs font-bold tracking-wider transition-all active:translate-y-px ${LAMP_CLASS[lamp]} ${
+      className={`flex h-9 flex-col items-center justify-center rounded-md border font-[family-name:var(--font-instrument)] text-xs font-bold tracking-wider transition-all active:translate-y-px ${LAMP_CLASS[lamp]} ${
         focused ? 'ring-2 ring-[var(--color-instrument)] ring-offset-2 ring-offset-[#0d1117]' : ''
       }`}
     >
