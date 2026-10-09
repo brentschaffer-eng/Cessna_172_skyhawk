@@ -1,13 +1,13 @@
 {
-  "name": "cesna-172-skyhawk-opus",
+  "name": "cessna-172-skyhawk-opus",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "build:plans": "vite build --base=/plans/",
-    "deploy:plans": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy-gcs-plans.ps1",
+    "build:plane": "vite build --base=/plane/",
+    "deploy:plane": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy-gcs-plane.ps1",
     "preview": "vite preview"
   },
   "dependencies": {
