@@ -125,7 +125,7 @@ function Cylinder({ side, z }) {
  * four horizontally opposed cylinders underneath become visible.
  */
 export function Powerplant({ selected, spin }) {
-  const g = useMemo(buildPowerplant, [])
+  const g = useMemo(() => buildPowerplant(), [])
   const propRef = useRef()
   const cowlOpacity = selected ? 0.25 : 1
 

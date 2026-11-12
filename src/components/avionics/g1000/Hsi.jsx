@@ -12,7 +12,8 @@ const polar = (a, r) => {
 export function Hsi({ heading, track, headingBug, nav, source }) {
   const isLoc = source === 'LOC1'
   const needleColor = isLoc ? G.green : G.magenta
-  const course = isLoc ? 360 : nav ? 360 : 360 // Simplified, assuming runway 360
+  // Both the localizer and the GPS final leg follow the runway in use.
+  const course = nav?.course ?? 360
   
   const ticks = []
   for (let a = 0; a < 360; a += 5) {
@@ -42,8 +43,6 @@ export function Hsi({ heading, track, headingBug, nav, source }) {
   const dots = nav ? (isLoc ? nav.locDots : nav.gpsDots) : 0
   
   // Calculate relative angles for the compass rose
-  const courseRel = course - heading
-  const bugRel = headingBug - heading
   const trkRel = track - heading
 
   // The CDI needle is split into a head, center bar (which deviates), and tail.

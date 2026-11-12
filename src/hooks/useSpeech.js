@@ -54,9 +54,7 @@ export function useSpeech() {
   // Invalidates callbacks from utterances cancelled by a newer request.
   const generationRef = useRef(0)
   const settingsRef = useRef(settings)
-  settingsRef.current = settings
   const statusRef = useRef(status)
-  statusRef.current = status
 
   useEffect(() => {
     if (!supported) return
@@ -72,7 +70,11 @@ export function useSpeech() {
   }, [supported])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+    } catch {
+      // Storage can be unavailable (private mode); the settings then last only for this visit.
+    }
   }, [settings])
 
   const activeVoice = useMemo(() => {
@@ -80,7 +82,13 @@ export function useSpeech() {
     return voices.find((v) => v.voiceURI === settings.voiceURI) ?? voices.find((v) => v.default) ?? voices[0]
   }, [voices, settings.voiceURI])
   const activeVoiceRef = useRef(activeVoice)
-  activeVoiceRef.current = activeVoice
+
+  // Mirrors of the latest values for the speech callbacks, which outlive the render that made them.
+  useEffect(() => {
+    settingsRef.current = settings
+    statusRef.current = status
+    activeVoiceRef.current = activeVoice
+  })
 
   const speakFrom = useCallback(
     (startIndex) => {
@@ -170,6 +178,8 @@ export function useSpeech() {
     document.addEventListener('visibilitychange', onHide)
     return () => {
       document.removeEventListener('visibilitychange', onHide)
+      // Deliberately the live counter: bumping it invalidates any utterance still queued.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
       generationRef.current++
       synth.cancel()
     }

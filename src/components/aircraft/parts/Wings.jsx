@@ -61,7 +61,7 @@ function HingedSurface({ frame, geometry, angle, slide = 0 }) {
 const toArray = (v) => [v.x, v.y, v.z]
 
 export function Wings({ flapsDown = false, rollInput = 0 }) {
-  const g = useMemo(buildWings, [])
+  const g = useMemo(() => buildWings(), [])
 
   return (
     <group>

@@ -6,10 +6,13 @@
  * comes alive, and ALTS only captures as you approach the preselected altitude. All
  * of that now happens on its own as the simulated Skyhawk flies, rather than on a
  * "simulate intercept" button.
+ *
+ * The reducer is pure: everything it needs, including the runway in use, is in the state.
  */
 
 import {
-  RUNWAY,
+  DEFAULT_RUNWAY,
+  alphaDeg,
   clamp,
   flightDirectorCommand,
   glideslopeCaptureReady,
@@ -17,6 +20,7 @@ import {
   navGeometry,
   pitchReference,
   rollReference,
+  rotateSpeed,
   stepAircraft,
   wrap360,
 } from '../sim/flightModel.js'
@@ -24,6 +28,9 @@ import {
 const FLASH_SECONDS = 10
 const AP_DISCONNECT_ALERT_SECONDS = 5
 const SUB_STEP = 0.05
+const ROTATE_PITCH = 7
+const HARD_LANDING_FPM = -500
+const NO_INPUT = { roll: 0, pitch: 0 }
 
 /** Ready for takeoff on Runway 36. */
 export const INITIAL_AP_STATE = {
@@ -48,6 +55,8 @@ export const INITIAL_AP_STATE = {
   fdCommand: null,
 
   // Airframe
+  runway: DEFAULT_RUNWAY,
+  flapsDown: false,
   x: 0,
   y: 0,
   heading: 360,
@@ -59,6 +68,8 @@ export const INITIAL_AP_STATE = {
   vs: 0,
   turnRate: 0,
   rpm: 700,
+  // The takeoff assist engages the AP once per flight; hand-flying or disconnecting cancels it.
+  autoEngageArmed: true,
 
   // Session
   paused: false,
@@ -66,6 +77,25 @@ export const INITIAL_AP_STATE = {
   elapsed: 0,
   message: null,
   milestones: {},
+}
+
+/**
+ * The autopilot tutor's starting point: level at 100 KIAS, south-west of the field on a 30°
+ * intercept for the final approach course, below the glideslope.
+ */
+export const AIRBORNE_SCENARIO = {
+  ...INITIAL_AP_STATE,
+  x: -1.5,
+  y: -11,
+  heading: 30,
+  headingBug: 30,
+  altitude: 6000,
+  selectedAltitude: 6000,
+  airspeed: 100,
+  rpm: 2100,
+  pitch: alphaDeg(100),
+  pitchRef: alphaDeg(100),
+  autoEngageArmed: false,
 }
 
 const LATERAL_ANNUNCIATION = { ROL: 'ROL', HDG: 'HDG', NAV: 'GPS', APR: 'LOC' }
@@ -88,6 +118,8 @@ export function annunciations(state) {
   return {
     ap: state.ap,
     apAlert: !state.ap && state.apDisconnectAlert > 0,
+    // The disconnect annunciation flashes twice a second, timed off the alert's own countdown.
+    apAlertBlink: Math.floor(state.apDisconnectAlert * 4) % 2 === 0,
     fd: state.fd,
     lateralActive: state.fd ? LATERAL_ANNUNCIATION[state.lateralActive] : '',
     lateralArmed: state.fd && state.lateralArmed ? LATERAL_ANNUNCIATION[state.lateralArmed] : '',
@@ -128,15 +160,21 @@ export function autopilotReducer(state, action) {
       return tick(state, action.dt, action.pilot, action.flapsDown)
     case 'teleport': {
       const heading = action.heading ?? INITIAL_AP_STATE.heading
+      const runway = action.runway ?? state.runway
       return {
         ...INITIAL_AP_STATE,
-        altitude: action.altitude,
+        runway,
+        flapsDown: state.flapsDown,
+        altitude: action.altitude ?? runway.elevation,
+        selectedAltitude: action.selectedAltitude ?? INITIAL_AP_STATE.selectedAltitude,
         heading,
         headingBug: wrap360(Math.round(heading)),
         x: action.x ?? 0,
         y: action.y ?? 0,
       }
     }
+    case 'load':
+      return action.state
     case 'reset':
       return INITIAL_AP_STATE
     default:
@@ -181,7 +219,7 @@ function cancelApproach(state) {
 
 function disconnect(state) {
   if (!state.ap) return state
-  return { ...state, ap: false, apDisconnectAlert: AP_DISCONNECT_ALERT_SECONDS }
+  return { ...state, ap: false, apDisconnectAlert: AP_DISCONNECT_ALERT_SECONDS, autoEngageArmed: false }
 }
 
 function press(state, id) {
@@ -370,38 +408,57 @@ function milestones(s) {
   return changed ? { ...s, milestones: next } : s
 }
 
-function tick(state, realDt, pilot, flapsDown) {
+/**
+ * Takeoff assist. With hands off, the airplane rotates itself at Vr and the autopilot takes
+ * over once it is climbing away. Any pilot input, or disconnecting the AP, hands the flight
+ * back for good: the assist only re-arms when the airplane is put back on the runway.
+ */
+function takeoffAssist(s, dt, pilot) {
+  if (!s.autoEngageArmed) return s
+  if (pilot.pitch !== 0 || pilot.roll !== 0) return { ...s, autoEngageArmed: false }
+
+  const vr = rotateSpeed(s.flapsDown)
+  if (s.altitude <= s.runway.elevation) {
+    return s.airspeed > vr ? { ...s, pitch: Math.min(s.pitch + 2 * dt, ROTATE_PITCH) } : s
+  }
+  if (!s.ap && s.altitude > s.runway.elevation + 20 && s.vs > 100 && s.airspeed > vr) {
+    return {
+      ...s,
+      ap: true,
+      fd: true,
+      lateralActive: 'HDG',
+      lateralArmed: null,
+      verticalActive: 'VS',
+      vsRef: 500,
+      armedGs: false,
+      autoEngageArmed: false,
+    }
+  }
+  return s
+}
+
+function tick(state, realDt, pilot = NO_INPUT, flapsDown = state.flapsDown) {
   if (state.paused || state.message) return state
 
-  let s = state
-  let remaining = Math.min(realDt, 0.1) * state.simRate
+  const scaled = Math.min(realDt, 0.1) * state.simRate
+  let s = state.flapsDown === flapsDown ? state : { ...state, flapsDown }
+  let remaining = scaled
   let lastCmd = s.fdCommand
+  let impactVs = 0
 
   while (remaining > 1e-6) {
     const dt = Math.min(SUB_STEP, remaining)
     remaining -= dt
     const nav = navGeometry(s)
     s = captures(s, nav)
-    
-    // Auto-takeoff behavior when flaps are up
-    if (!flapsDown && s.altitude <= RUNWAY.elevation && s.airspeed > 65) {
-      s.pitch = Math.min(s.pitch + 2 * dt, 7) // Auto pitch up to rotate
-    }
-
-    // Auto-engage AP once airborne after an auto-takeoff
-    if (!flapsDown && s.altitude > RUNWAY.elevation + 20 && s.vs > 100 && !s.ap && s.airspeed > 65) {
-      s.ap = true
-      s.fd = true
-      s.verticalActive = 'VS'
-      s.vsRef = 500
-      s.lateralActive = 'HDG'
-    }
+    s = takeoffAssist(s, dt, pilot)
 
     lastCmd = flightDirectorCommand(s, nav)
+    const wasAirborne = s.altitude > s.runway.elevation
     s = stepAircraft(s, dt, lastCmd, pilot)
+    if (wasAirborne && s.altitude <= s.runway.elevation) impactVs = Math.min(impactVs, s.vs)
   }
 
-  const scaled = Math.min(realDt, 0.1) * state.simRate
   s = {
     ...s,
     fdCommand: lastCmd,
@@ -412,19 +469,20 @@ function tick(state, realDt, pilot, flapsDown) {
   }
   s = milestones(s)
 
-  const agl = s.altitude - RUNWAY.elevation
-  if (s.fd && s.verticalActive === 'GS' && agl <= 200) {
+  const agl = s.altitude - s.runway.elevation
+  // Announced once, so dismissing it lets the pilot carry on and land by hand.
+  if (s.fd && s.verticalActive === 'GS' && agl <= 200 && !s.milestones.minimums) {
     return {
       ...disconnect(s),
       milestones: { ...s.milestones, minimums: true },
       message: {
         tone: 'success',
         title: 'Minimums — 200 ft',
-        body: 'The ILS is flown. The GFC 700 must be disconnected by 200 ft AGL on an approach; from here you would land by hand. Reset to fly it again.',
+        body: 'The ILS is flown. The GFC 700 must be disconnected by 200 ft AGL on an approach; from here you land by hand. Continue to fly the landing yourself, or reset to fly the approach again.',
       },
     }
   }
-  if (agl <= 0 && s.vs < -500) {
+  if (impactVs < HARD_LANDING_FPM) {
     return {
       ...disconnect(s),
       message: {

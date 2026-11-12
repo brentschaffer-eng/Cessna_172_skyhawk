@@ -1,6 +1,6 @@
 import { G, T } from './symbology.jsx'
 
-export function AfcsStatusBox({ ap, apAlert, fd, lateralActive, lateralArmed, verticalActive, reference, verticalArmed, flashLateral, flashVertical }) {
+export function AfcsStatusBox({ ap, apAlert, apAlertBlink, fd, lateralActive, lateralArmed, verticalActive, reference, verticalArmed, flashLateral, flashVertical }) {
   const cx = 512
   const w = 400
   const h = 40
@@ -36,7 +36,7 @@ export function AfcsStatusBox({ ap, apAlert, fd, lateralActive, lateralArmed, ve
 
       {/* AP/FD Status */}
       <T x={cx} y={y + 20} size={18} anchor="middle" fill={apAlert ? G.yellow : activeColor}>
-        {apAlert ? (Math.floor(Date.now() / 250) % 2 === 0 ? 'AP' : '') : ap ? 'AP' : ''}
+        {apAlert ? (apAlertBlink ? 'AP' : '') : ap ? 'AP' : ''}
       </T>
       <T x={cx} y={y + 36} size={18} anchor="middle" fill={activeColor}>
         {fd && !ap ? 'FD' : ''}

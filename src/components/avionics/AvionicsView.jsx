@@ -1,6 +1,8 @@
-import { useEffect, useReducer, useRef } from 'react'
+import { useCallback } from 'react'
 import { MODE_BY_ID } from '../../data/autopilotModes.js'
-import { INITIAL_AP_STATE, autopilotReducer } from '../../state/autopilotReducer.js'
+import { useSimulation } from '../../hooks/useSimulation.js'
+import { AIRBORNE_SCENARIO } from '../../state/autopilotReducer.js'
+import { SimMessage } from '../SimMessage.jsx'
 import { GfcBezel } from './GfcBezel.jsx'
 import { ModeInfoPanel } from './ModeInfoPanel.jsx'
 import { Pfd } from './g1000/Pfd.jsx'
@@ -9,29 +11,20 @@ const SMALL_BTN =
   'rounded-md border border-[var(--color-panel-edge)] bg-[var(--color-panel-raised)] px-3 py-1.5 text-xs font-medium text-slate-200 transition-colors hover:border-slate-500 disabled:opacity-40'
 
 export function AvionicsView({ selectedId, onSelect }) {
-  const [ap, dispatch] = useReducer(autopilotReducer, INITIAL_AP_STATE)
+  // Starts in the air, on an intercept for the approach, so every mode has something to fly.
+  const [ap, dispatch] = useSimulation(() => AIRBORNE_SCENARIO)
   const mode = selectedId ? MODE_BY_ID[selectedId] : null
-  
-  const lastTimeRef = useRef(performance.now())
 
-  useEffect(() => {
-    let frameId
-    const loop = (time) => {
-      const dt = (time - lastTimeRef.current) / 1000
-      lastTimeRef.current = time
-      if (dt < 0.2) {
-        dispatch({ type: 'tick', dt, pilot: { roll: 0, pitch: 0 } })
-      }
-      frameId = requestAnimationFrame(loop)
-    }
-    frameId = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(frameId)
-  }, [])
+  const dismissMessage = useCallback(() => dispatch({ type: 'dismissMessage' }), [dispatch])
+  const restart = useCallback(() => dispatch({ type: 'load', state: AIRBORNE_SCENARIO }), [dispatch])
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_420px]">
       <div className="flex min-w-0 flex-col gap-4">
-        <Pfd ap={ap} />
+        <div className="relative">
+          <Pfd ap={ap} />
+          <SimMessage message={ap.message} onContinue={dismissMessage} onReset={restart} />
+        </div>
 
         <GfcBezel
           ap={ap}
@@ -82,10 +75,10 @@ export function AvionicsView({ selectedId, onSelect }) {
             {ap.simRate === 1 ? 'Speed up time (4x)' : 'Normal speed (1x)'}
           </button>
           <p className="min-w-40 flex-1 text-xs text-slate-500">
-            The flight is now simulated automatically in the background.
+            You start level at 6,000 ft on a 30° intercept for the ILS. Engage the AP, then try HDG, ALT and APR and watch the modes arm and capture.
           </p>
-          <button type="button" className={SMALL_BTN} onClick={() => dispatch({ type: 'reset' })}>
-            Reset panel
+          <button type="button" className={SMALL_BTN} onClick={restart}>
+            Restart scenario
           </button>
         </div>
       </div>

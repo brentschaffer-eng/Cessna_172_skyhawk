@@ -13,8 +13,11 @@
 export const KT_TO_FPM = 101.27
 const NM_FT = 6076.12
 
-/** Runway 36 threshold sits at the origin; the ILS and the GPS final leg share the 360° course. */
-export const RUNWAY = { id: 'RW36', x: 0, y: 0, course: 360, elevation: 3557 }
+/**
+ * The runway threshold sits at the origin; the ILS and the GPS final leg share its course.
+ * This is only the default: the runway in use travels in the aircraft state as `s.runway`.
+ */
+export const DEFAULT_RUNWAY = Object.freeze({ id: 'RW36', x: 0, y: 0, course: 360, elevation: 3557 })
 export const GS_ANGLE = 3
 const TCH_FT = 50
 const LOC_ANTENNA_BEYOND_NM = 1.2 // Localizer antenna sits past the far end of the runway.
@@ -45,18 +48,43 @@ export function enginePower(rpm) {
 }
 
 const POWER_AVAILABLE_FPM = 1443
+const FPM_TO_KT_PER_SEC = 0.1882 // Converts excess power (as fpm) over speed (kt) into kt/s.
+const FLAP_DRAG_FACTOR = 1.35
+
+/** Stall and rotation speeds; full flaps lower both. */
+export const stallSpeed = (flapsDown) => (flapsDown ? 40 : 47)
+export const rotateSpeed = (flapsDown) => (flapsDown ? 55 : 65)
+
+/** Parasite drag power: grows with the cube of speed, and extended flaps add to it. */
+function parasiteFpm(v, flapsDown) {
+  return 572 * (flapsDown ? FLAP_DRAG_FACTOR : 1) * (v / 100) ** 3
+}
 
 /** Power required to hold level flight, expressed as an equivalent climb rate. */
-function powerRequiredFpm(v, bank) {
-  const s = Math.max(v, 35) / 100
-  const level = 572 * s ** 3 + 354 / s
+function powerRequiredFpm(v, bank, flapsDown) {
+  const speed = Math.max(v, 35)
+  const level = parasiteFpm(speed, flapsDown) + 354 / (speed / 100)
   // Induced drag goes up with load factor in a turn.
   return level * (1 + 0.6 * (1 / Math.cos(rad(bank)) - 1))
 }
 
 /** Climb rate available if all excess power went into altitude at this speed. */
-export function excessFpm(v, rpm, bank = 0) {
-  return POWER_AVAILABLE_FPM * enginePower(rpm) - powerRequiredFpm(v, bank)
+export function excessFpm(v, rpm, bank = 0, flapsDown = false) {
+  return POWER_AVAILABLE_FPM * enginePower(rpm) - powerRequiredFpm(v, bank, flapsDown)
+}
+
+const GROUND_ACCEL_LIMIT = 4 // kt/s; static thrust is finite even though power / speed is not.
+const ROLLING_RESISTANCE = 1 // kt/s
+const IDLE_BRAKING = 6 // kt/s; closing the throttle on the ground also applies the brakes.
+
+/**
+ * Acceleration during the ground roll. The wheels carry the weight, so there is no induced
+ * drag to overcome: any power above idle gets the airplane moving, as it does in a real taxi.
+ */
+function groundRollAccel(v, rpm, flapsDown) {
+  const surplus = POWER_AVAILABLE_FPM * enginePower(rpm) - parasiteFpm(v, flapsDown)
+  const thrust = Math.min(GROUND_ACCEL_LIMIT, (surplus * FPM_TO_KT_PER_SEC) / Math.max(v, 1))
+  return thrust - ROLLING_RESISTANCE - (rpm < 1000 ? IDLE_BRAKING : 0)
 }
 
 /** Angle of attack needed at a given airspeed; pitch = flight path + AoA. */
@@ -89,9 +117,10 @@ export function glideslopeAltitude(distNm) {
  * course is to the right; a positive GS value means the glideslope is above you.
  */
 export function navGeometry(s) {
-  const c = rad(RUNWAY.course)
-  const dx = s.x - RUNWAY.x
-  const dy = s.y - RUNWAY.y
+  const runway = s.runway
+  const c = rad(runway.course)
+  const dx = s.x - runway.x
+  const dy = s.y - runway.y
   const ux = Math.sin(c)
   const uy = Math.cos(c)
   const along = dx * ux + dy * uy
@@ -101,15 +130,16 @@ export function navGeometry(s) {
   const locDist = Math.max(distToThreshold + LOC_ANTENNA_BEYOND_NM, 0.05)
   const locDevDeg = deg(Math.atan2(xtk, locDist))
 
-  const aboveField = s.altitude - RUNWAY.elevation
+  const aboveField = s.altitude - runway.elevation
   const gsAngle = deg(Math.atan2(aboveField - TCH_FT, Math.max(distToThreshold, 0.05) * NM_FT))
   const gsDevDeg = GS_ANGLE - gsAngle // + = glideslope above aircraft
 
   // Closing rate on the course (nm per second), negative when converging.
-  const trackErr = angleDiff(s.heading, RUNWAY.course)
+  const trackErr = angleDiff(s.heading, runway.course)
   const xtkRate = (s.airspeed / 3600) * Math.sin(rad(trackErr))
 
   return {
+    course: runway.course,
     xtk,
     xtkRate,
     distToThreshold,
@@ -118,7 +148,7 @@ export function navGeometry(s) {
     locDevDeg,
     gsDots: clamp((gsDevDeg / GS_FULL_SCALE_DEG) * 2, -2.4, 2.4),
     gsDevDeg,
-    glideslopeAlt: glideslopeAltitude(Math.max(distToThreshold, 0)) + RUNWAY.elevation,
+    glideslopeAlt: glideslopeAltitude(Math.max(distToThreshold, 0)) + runway.elevation,
     bearingToRunway: wrap360(deg(Math.atan2(-dx, -dy))),
   }
 }
@@ -126,7 +156,7 @@ export function navGeometry(s) {
 /** Distance before the course at which a turn onto it must start (turn anticipation). */
 function captureLead(s) {
   const turnRadiusNm = (s.airspeed ** 2 / (11.26 * Math.tan(rad(HDG_BANK_LIMIT)))) / NM_FT
-  const intercept = Math.min(Math.abs(angleDiff(s.heading, RUNWAY.course)), 90)
+  const intercept = Math.min(Math.abs(angleDiff(s.heading, s.runway.course)), 90)
   return turnRadiusNm * (1 - Math.cos(rad(intercept))) + 0.05
 }
 
@@ -156,7 +186,7 @@ function bankForHeading(target, s) {
 
 function headingForCourse(nav) {
   // Proportional intercept: 30° cut when well off, shallowing as the needle centres.
-  return wrap360(RUNWAY.course - clamp(nav.xtk * 60, -30, 30))
+  return wrap360(nav.course - clamp(nav.xtk * 60, -30, 30))
 }
 
 function altitudeHoldVs(s) {
@@ -167,7 +197,7 @@ function altitudeHoldVs(s) {
 function flcVs(s) {
   const v = s.airspeed
   const wantAccel = (s.flcRef - v) * 0.15 // kt/s
-  let vs = excessFpm(v, s.rpm, s.bank) - (wantAccel * v) / 0.1882
+  let vs = excessFpm(v, s.rpm, s.bank, s.flapsDown) - (wantAccel * v) / FPM_TO_KT_PER_SEC
   // FLC never climbs away from a lower selected altitude or descends away from a higher one.
   if (s.selectedAltitude < s.altitude) vs = Math.min(vs, 0)
   else vs = Math.max(vs, 0)
@@ -251,27 +281,29 @@ export function stepAircraft(s, dt, cmd, pilot) {
   }
 
   const v = s.airspeed
+  const fieldElevation = s.runway.elevation
   // Past the critical angle of attack the nose falls through no matter what.
-  if (v < 47 && s.altitude > RUNWAY.elevation + 10) pitch -= 8 * dt
+  if (v < stallSpeed(s.flapsDown) && s.altitude > fieldElevation + 10) pitch -= 8 * dt
 
   bank = clamp(bank, -60, 60)
   pitch = clamp(pitch, -25, 25)
 
   const gamma = pitch - alphaDeg(v)
   let vs = v * KT_TO_FPM * Math.sin(rad(gamma))
-  
+
   // Prevent falling through the ground
-  if (s.altitude <= RUNWAY.elevation && vs < 0) {
+  const rolling = s.altitude <= fieldElevation && vs <= 0
+  if (rolling) {
     vs = 0
     pitch = Math.max(pitch, 0)
     bank = 0
   }
 
   const safeV = Math.max(v, 1)
-  // Ground friction when at 0 throttle and on the ground
-  const groundDrag = (s.altitude <= RUNWAY.elevation && s.rpm < 1000) ? 20 : 0
-  const accel = ((excessFpm(v, s.rpm, bank) - vs) * 0.1882) / safeV - groundDrag
-  
+  const accel = rolling
+    ? groundRollAccel(v, s.rpm, s.flapsDown)
+    : ((excessFpm(v, s.rpm, bank, s.flapsDown) - vs) * FPM_TO_KT_PER_SEC) / safeV
+
   // Allow speed to drop to 0
   const airspeed = clamp(v + accel * dt, 0, 175)
   const turnRate = (1091 * Math.tan(rad(bank))) / safeV
@@ -287,7 +319,7 @@ export function stepAircraft(s, dt, cmd, pilot) {
     airspeedTrend: accel * 6, // G1000 trend vector: speed in 6 seconds.
     turnRate,
     heading,
-    altitude: Math.max(RUNWAY.elevation, s.altitude + (vs / 60) * dt),
+    altitude: Math.max(fieldElevation, s.altitude + (vs / 60) * dt),
     x: s.x + groundNmPerSec * Math.sin(rad(heading)) * dt,
     y: s.y + groundNmPerSec * Math.cos(rad(heading)) * dt,
   }

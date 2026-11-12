@@ -1,14 +1,21 @@
-import { useEffect, useReducer, useRef, useState, Suspense } from 'react'
+import { lazy, useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react'
 import { INITIAL_AP_STATE, autopilotReducer } from '../state/autopilotReducer.js'
 import { Pfd } from './avionics/g1000/Pfd.jsx'
 import { GfcBezel } from './avionics/GfcBezel.jsx'
-import { AircraftScene } from './aircraft/AircraftScene.jsx'
 import { ThrottleQuadrant } from './controls/ThrottleQuadrant.jsx'
+import { SimMessage } from './SimMessage.jsx'
 import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion.js'
-import { RUNWAY } from '../sim/flightModel.js'
+import { useSimulation } from '../hooks/useSimulation.js'
+
+// Three.js is most of the bundle; load it after the instruments are on screen.
+const AircraftScene = lazy(() =>
+  import('./aircraft/AircraftScene.jsx').then((m) => ({ default: m.AircraftScene })),
+)
 
 const COMPACT_BTN =
   'rounded-md border border-[#3a424d] bg-gradient-to-b from-[#2b323b] to-[#1c2229] px-2 py-1 font-[family-name:var(--font-instrument)] text-[11px] font-bold text-slate-200 transition-colors hover:border-slate-500 active:translate-y-px'
+const OVERLAY_PILL =
+  'pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-white/20 bg-slate-950/45 px-3 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-colors hover:bg-slate-950/65'
 
 /** Space the throttle console occupies at the 3D view's right edge (its width plus margin). */
 const THROTTLE_CONSOLE_PX = 168
@@ -21,54 +28,110 @@ const AIRPORTS = [
   { id: 'CYEG', name: 'Edmonton (CYEG)', elevation: 2373, runway: { id: '02', heading: 33.9, lengthFt: 11000 }, lat: 53.308899, lon: -113.596001 },
   { id: 'CYWG', name: 'Winnipeg (CYWG)', elevation: 783, runway: { id: '36', heading: 9.3, lengthFt: 11000 }, lat: 49.895599, lon: -97.241699 },
 ]
+const DEFAULT_AIRPORT = AIRPORTS[1]
 
 /** Roll a little past the threshold so the aircraft sits on pavement, not on the runway end. */
 const LINEUP_OFFSET_NM = 0.02
 
+/** Lines up on the airport's longest runway with the preselect about 2000 ft above the field. */
 function lineUpAction(a) {
-  RUNWAY.elevation = a.elevation
-  RUNWAY.course = a.runway.heading
-  RUNWAY.id = `RW${a.runway.id}`
   const h = (a.runway.heading * Math.PI) / 180
   return {
     type: 'teleport',
-    altitude: a.elevation,
+    runway: { id: `RW${a.runway.id}`, x: 0, y: 0, course: a.runway.heading, elevation: a.elevation },
     heading: a.runway.heading,
+    selectedAltitude: Math.ceil(a.elevation / 500) * 500 + 2000,
     x: LINEUP_OFFSET_NM * Math.sin(h),
     y: LINEUP_OFFSET_NM * Math.cos(h),
   }
 }
 
+const NO_SELECTION = () => {}
+
+/** Arrow keys work the yoke: up pushes the nose down, down pulls it up, left and right roll. */
+const YOKE_KEYS = {
+  ArrowUp: ['pitch', -1],
+  ArrowDown: ['pitch', 1],
+  ArrowLeft: ['roll', -1],
+  ArrowRight: ['roll', 1],
+}
+
+/** Tracks held arrow keys into `inputsRef.current.pilot`, leaving form controls their own arrows. */
+function useYokeKeys(inputsRef) {
+  useEffect(() => {
+    const held = new Set()
+    const apply = () => {
+      const pilot = { roll: 0, pitch: 0 }
+      for (const key of held) pilot[YOKE_KEYS[key][0]] += YOKE_KEYS[key][1]
+      inputsRef.current = { ...inputsRef.current, pilot }
+    }
+    const onDown = (e) => {
+      if (!YOKE_KEYS[e.key] || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return
+      if (e.target.closest?.('input, select, textarea, [role="slider"], [role="alertdialog"]')) return
+      e.preventDefault() // Otherwise the arrows scroll the page on small screens.
+      held.add(e.key)
+      apply()
+    }
+    const onUp = (e) => {
+      if (held.delete(e.key)) apply()
+    }
+    const release = () => {
+      held.clear()
+      apply()
+    }
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    window.addEventListener('blur', release)
+    return () => {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+      window.removeEventListener('blur', release)
+    }
+  }, [inputsRef])
+}
+
+/** The embedded map only reloads once the aircraft has moved this far (about half a mile). */
+const MAP_STEP_DEG = 0.01
+const snapToMapStep = (deg) => Math.round(deg / MAP_STEP_DEG) * MAP_STEP_DEG
+
 function MapModal({ lat, lon, airportName, onClose }) {
-  const [pos, setPos] = useState({ lat, lon })
+  const mapLat = snapToMapStep(lat)
+  const mapLon = snapToMapStep(lon)
+  const closeRef = useRef(null)
 
   useEffect(() => {
-    if (Math.abs(pos.lat - lat) > 0.01 || Math.abs(pos.lon - lon) > 0.01) {
-      setPos({ lat, lon })
+    closeRef.current?.focus()
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose()
     }
-  }, [lat, lon, pos])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
 
   return (
-    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 sm:p-8">
-      <div className="relative w-full max-w-3xl overflow-hidden rounded-xl bg-white shadow-2xl flex flex-col">
-        <div className="flex items-center justify-between bg-slate-100 px-4 py-3 border-b border-slate-200">
-          <h3 className="font-semibold text-slate-800 flex items-center gap-2">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+    <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm sm:p-8" onClick={onClose}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${airportName} live map`}
+        className="relative flex w-full max-w-3xl flex-col overflow-hidden rounded-xl bg-white shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100 px-4 py-3">
+          <h3 className="flex items-center gap-2 font-semibold text-slate-800">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
             {airportName} (Live Tracker)
           </h3>
-          <button onClick={onClose} className="rounded-md p-1 hover:bg-slate-200 text-slate-500">
-            <svg width="20" height="20" viewBox="0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <button ref={closeRef} type="button" onClick={onClose} aria-label="Close map" className="rounded-md p-1 text-slate-500 hover:bg-slate-200">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
         </div>
-        <iframe 
-          width="100%" 
-          height="500" 
-          frameBorder="0" 
-          scrolling="no" 
-          marginHeight="0" 
-          marginWidth="0" 
-          src={`https://www.openstreetmap.org/export/embed.html?bbox=${pos.lon-0.03}%2C${pos.lat-0.03}%2C${pos.lon+0.03}%2C${pos.lat+0.03}&layer=mapnik&marker=${pos.lat}%2C${pos.lon}`}
-          className="bg-slate-100"
+        <iframe
+          title={`Map of the aircraft's position near ${airportName}`}
+          width="100%"
+          height="500"
+          src={`https://www.openstreetmap.org/export/embed.html?bbox=${mapLon - 0.03}%2C${mapLat - 0.03}%2C${mapLon + 0.03}%2C${mapLat + 0.03}&layer=mapnik&marker=${mapLat}%2C${mapLon}`}
+          className="border-0 bg-slate-100"
         />
       </div>
     </div>
@@ -76,13 +139,15 @@ function MapModal({ lat, lon, airportName, onClose }) {
 }
 
 export function FlightSimView() {
-  const [ap, dispatch] = useReducer(autopilotReducer, INITIAL_AP_STATE)
+  const inputsRef = useRef({ pilot: { roll: 0, pitch: 0 }, flapsDown: false })
+  const [ap, dispatch, simRef] = useSimulation(
+    () => autopilotReducer(INITIAL_AP_STATE, lineUpAction(DEFAULT_AIRPORT)),
+    inputsRef,
+  )
   const reducedMotion = usePrefersReducedMotion()
-  const lastTimeRef = useRef(performance.now())
 
-  const [pilot, setPilot] = useState({ roll: 0, pitch: 0 })
   const [flapsDown, setFlapsDown] = useState(false)
-  const [airport, setAirport] = useState(AIRPORTS[1])
+  const [airport, setAirport] = useState(DEFAULT_AIRPORT)
   const [showMap, setShowMap] = useState(false)
   const [showThrottle, setShowThrottle] = useState(() => {
     try {
@@ -100,39 +165,24 @@ export function FlightSimView() {
     }
   }, [showThrottle])
 
-  // Line up on the longest runway and set the preselect 2000 ft above the field on load.
   useEffect(() => {
-    dispatch(lineUpAction(airport))
-    dispatch({ type: 'selectedAltitude', delta: (Math.ceil(airport.elevation / 500) * 500 + 2000) - INITIAL_AP_STATE.selectedAltitude })
-  }, [])
+    inputsRef.current = { ...inputsRef.current, flapsDown }
+  }, [flapsDown])
+  useYokeKeys(inputsRef)
 
-  useEffect(() => {
-    let frameId
-    const loop = (time) => {
-      const dt = (time - lastTimeRef.current) / 1000
-      lastTimeRef.current = time
-      if (dt < 0.2) {
-        dispatch({ type: 'tick', dt, pilot, flapsDown })
-      }
-      frameId = requestAnimationFrame(loop)
-    }
-    frameId = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(frameId)
-  }, [pilot, flapsDown])
+  const closeMap = useCallback(() => setShowMap(false), [])
+  const dismissMessage = useCallback(() => dispatch({ type: 'dismissMessage' }), [dispatch])
+  const resetFlight = () => dispatch(lineUpAction(airport))
 
-  const controls = {
-    flapsDown,
-    propSpin: ap.rpm > 1000,
-    rollInput: ap.bank / 60,
-    pitchInput: ap.pitch / 25,
-    yawInput: 0,
-    apPitch: ap.pitch,
-    apBank: ap.bank,
-    apHeading: ap.heading,
-    apX: ap.x,
-    apY: ap.y,
-    apAltitude: ap.altitude,
-  }
+  // Control-surface deflections follow the attitude. Rounding them keeps this object, and with
+  // it the whole 3D scene, from re-rendering every frame; the surfaces ease between steps.
+  const propSpin = ap.rpm > 1000
+  const rollInput = Math.round((ap.bank / 60) * 20) / 20
+  const pitchInput = Math.round((ap.pitch / 25) * 20) / 20
+  const controls = useMemo(
+    () => ({ flapsDown, propSpin, rollInput, pitchInput, yawInput: 0 }),
+    [flapsDown, propSpin, rollInput, pitchInput],
+  )
 
   return (
     <div className="flex min-h-svh w-full flex-col px-4 py-3 sm:px-6 lg:h-svh">
@@ -145,7 +195,7 @@ export function FlightSimView() {
               ap={ap}
               selectedId={null}
               onPress={(id) => dispatch({ type: 'press', id })}
-              onSelect={() => {}}
+              onSelect={NO_SELECTION}
             >
               <div className="grid grid-cols-2 gap-6">
                 <div className="flex flex-col gap-1">
@@ -176,7 +226,6 @@ export function FlightSimView() {
                         const a = AIRPORTS.find(a => a.id === e.target.value)
                         setAirport(a)
                         dispatch(lineUpAction(a))
-                        dispatch({ type: 'selectedAltitude', delta: (Math.ceil(a.elevation / 500) * 500 + 2000) - INITIAL_AP_STATE.selectedAltitude })
                       }}
                     >
                       {AIRPORTS.map(a => <option key={a.id} value={a.id} className="bg-[var(--color-panel-raised)] text-slate-100">{a.name}</option>)}
@@ -208,12 +257,15 @@ export function FlightSimView() {
           <div className="relative min-h-[520px] w-full overflow-hidden rounded-xl border border-[var(--color-panel-edge)] bg-[#6ba3ff] lg:h-full lg:min-h-0">
             {/* Overlays: the 3D view stays the centrepiece; controls float over its edges. */}
             <div className="pointer-events-none absolute inset-3 z-20 flex items-start gap-3">
-              <button 
-                type="button"
-                onClick={() => setShowMap(true)}
-                className="pointer-events-auto ml-auto flex h-9 items-center gap-2 rounded-full border border-white/20 bg-slate-950/45 px-3 text-xs font-semibold text-white shadow-lg backdrop-blur-md transition-colors hover:bg-slate-950/65"
-                title="View map"
-              >
+              <nav aria-label="Training modules" className="flex flex-col gap-2 xl:flex-row">
+                <a href="#/aircraft" className={OVERLAY_PILL} title="Exploded airframe walkthrough">Airframe</a>
+                <a href="#/avionics" className={OVERLAY_PILL} title="GFC 700 autopilot mode tutor">AP tutor</a>
+              </nav>
+
+              <button type="button" onClick={resetFlight} className={`${OVERLAY_PILL} ml-auto`} title="Put the aircraft back on the runway">
+                Reset
+              </button>
+              <button type="button" onClick={() => setShowMap(true)} className={OVERLAY_PILL} title="View map">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21"></polygon>
                   <line x1="9" y1="3" x2="9" y2="18"></line>
@@ -282,19 +334,34 @@ export function FlightSimView() {
                 lat={airport.lat + (ap.y / 60)}
                 lon={airport.lon + (ap.x / (60 * Math.cos(airport.lat * Math.PI / 180)))}
                 airportName={airport.name}
-                onClose={() => setShowMap(false)}
+                onClose={closeMap}
               />
             )}
 
-            <Suspense fallback={<p className="flex h-full items-center justify-center text-sm text-slate-500">Loading 3D Flight Simulator...</p>}>
+            <SimMessage message={ap.message} onContinue={dismissMessage} onReset={resetFlight} />
+
+            {/* Kept clear of the throttle console, which reaches down the right edge. */}
+            <div
+              className="pointer-events-none absolute bottom-2 left-3 z-10 flex flex-col gap-0.5 text-[10px] leading-tight text-white/85 [text-shadow:0_1px_2px_rgb(0_0_0_/_0.9)]"
+              style={{ right: 12 + (showThrottle ? THROTTLE_CONSOLE_PX : 0) }}
+            >
+              <p>Arrow keys fly by hand when the autopilot is off · drag to orbit · scroll to zoom</p>
+              <p>
+                Imagery ©{' '}
+                <a className="pointer-events-auto underline" href="https://www.esri.com/" target="_blank" rel="noreferrer">Esri</a>
+                , Maxar, Earthstar Geographics, and the GIS User Community
+              </p>
+            </div>
+
+            <Suspense fallback={<p className="flex h-full items-center justify-center text-sm text-white/85">Loading 3D Flight Simulator...</p>}>
               <AircraftScene
                 selectedId={null}
-                onSelect={() => {}}
+                onSelect={NO_SELECTION}
                 reducedMotion={reducedMotion}
                 controls={controls}
-                airportElevation={airport.elevation}
-                airportLat={airport.lat}
-                airportLon={airport.lon}
+                simRef={simRef}
+                originLat={airport.lat}
+                originLon={airport.lon}
                 viewInsetRight={showThrottle ? THROTTLE_CONSOLE_PX : 0}
               />
             </Suspense>

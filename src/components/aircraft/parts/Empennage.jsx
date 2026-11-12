@@ -111,7 +111,7 @@ function buildEmpennage() {
 }
 
 export function Empennage({ pitchInput = 0, yawInput = 0 }) {
-  const g = useMemo(buildEmpennage, [])
+  const g = useMemo(() => buildEmpennage(), [])
   const elevatorRef = useRef()
   const rudderRef = useRef()
 

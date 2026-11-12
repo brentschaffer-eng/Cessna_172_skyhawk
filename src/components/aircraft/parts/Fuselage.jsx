@@ -49,8 +49,8 @@ function buildFuselage() {
 }
 
 export function Fuselage() {
-  const g = useMemo(buildFuselage, [])
-  const registration = useMemo(getRegistrationTexture, [])
+  const g = useMemo(() => buildFuselage(), [])
+  const registration = useMemo(() => getRegistrationTexture(), [])
   const topAt = (z) => FUSELAGE(z).top
   const bottomAt = (z) => FUSELAGE(z).bottom
 

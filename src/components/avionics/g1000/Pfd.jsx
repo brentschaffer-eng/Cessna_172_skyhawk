@@ -58,6 +58,7 @@ export function Pfd({ ap }) {
         <AfcsStatusBox
           ap={a.ap}
           apAlert={a.apAlert}
+          apAlertBlink={a.apAlertBlink}
           fd={a.fd}
           lateralActive={a.lateralActive}
           lateralArmed={a.lateralArmed}

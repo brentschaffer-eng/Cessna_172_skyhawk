@@ -95,7 +95,19 @@ function PartGroup({ part, selected, anySelected, onSelect, reducedMotion, child
   )
 }
 
-export function ExplodedAircraft({ selectedId, onSelect, reducedMotion, controls }) {
+/**
+ * `simRef`, when given, is the live simulation state: the airframe's pitch and bank are read
+ * from it every frame instead of arriving as props, so flying does not re-render the model.
+ */
+export function ExplodedAircraft({ selectedId, onSelect, reducedMotion, controls, simRef }) {
+  const attitudeRef = useRef()
+  useFrame(() => {
+    const s = simRef?.current
+    if (!s || !attitudeRef.current) return
+    attitudeRef.current.rotation.x = (s.pitch * Math.PI) / 180
+    attitudeRef.current.rotation.z = (-s.bank * Math.PI) / 180
+  })
+
   const anySelected = Boolean(selectedId)
   const shared = { anySelected, onSelect, reducedMotion }
 
@@ -107,11 +119,8 @@ export function ExplodedAircraft({ selectedId, onSelect, reducedMotion, controls
     gear: <LandingGear />,
   }
 
-  const pitch = ((controls?.apPitch || 0) * Math.PI) / 180
-  const bank = (-(controls?.apBank || 0) * Math.PI) / 180
-
   return (
-    <group position={[0, 0.35, 0]} rotation={[pitch, 0, bank]} rotation-order="YXZ">
+    <group ref={attitudeRef} position={[0, 0.35, 0]} rotation-order="YXZ">
       {AIRCRAFT_PARTS.map((part) => (
         <PartGroup key={part.id} part={part} selected={selectedId === part.id} {...shared}>
           {renderers[part.id]}

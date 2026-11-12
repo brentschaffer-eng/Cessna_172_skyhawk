@@ -87,7 +87,9 @@ export function ThrottleQuadrant({ rpm, onChange, variant = 'panel', showTitle =
 
   // React's wheel listener is passive, so the page would scroll too; attach a native one instead.
   const latest = useRef({ value, onChange })
-  latest.current = { value, onChange }
+  useEffect(() => {
+    latest.current = { value, onChange }
+  })
   useEffect(() => {
     const el = trackRef.current
     const onWheel = (e) => {

@@ -49,6 +49,11 @@ export function AircraftView({ selectedId, onSelect }) {
           <p className="pointer-events-none absolute bottom-2 left-3 text-[11px] text-slate-500">
             Drag to orbit · scroll to zoom · click a section to explode it
           </p>
+          <p className="absolute bottom-2 right-3 text-[10px] text-white/80 [text-shadow:0_1px_2px_rgb(0_0_0_/_0.9)]">
+            Imagery ©{' '}
+            <a className="underline" href="https://www.esri.com/" target="_blank" rel="noreferrer">Esri</a>
+            , Maxar, Earthstar Geographics
+          </p>
         </div>
 
         <ControlToolbar controls={controls} onChange={update} reducedMotion={reducedMotion} />

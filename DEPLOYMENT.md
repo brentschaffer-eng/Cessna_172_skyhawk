@@ -7,11 +7,12 @@
 Push to `main` on GitHub. The Cloud Build trigger `cessna-trainer` runs [cloudbuild.yaml](cloudbuild.yaml), which:
 
 1. installs dependencies with `npm ci`,
-2. builds with `npm run build:plane` (Vite base `/plane/`), and
-3. syncs `dist` to `gs://beesone.ca/plane`, then sets `index.html` to `no-cache` and the hashed
+2. runs `npm run lint` and `npm test`,
+3. builds with `npm run build:plane` (Vite base `/plane/`), and
+4. syncs `dist` to `gs://beesone.ca/plane`, then sets `index.html` to `no-cache` and the hashed
    files in `assets/` to long-lived immutable caching.
 
-A failed install or build stops before anything is uploaded. The sync intentionally has no
+A failed install, lint, test or build stops before anything is uploaded. The sync intentionally has no
 deletion flag, so older assets remain available to browsers still holding a previous `index.html`.
 The Beesone dashboard manager's **GitHub deploys** panel shows each build's progress and result.
 

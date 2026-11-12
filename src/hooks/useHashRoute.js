@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 
-const TABS = ['aircraft', 'avionics']
+// The first tab is the default: a bare URL opens the flight simulator.
+const TABS = ['sim', 'aircraft', 'avionics']
 
 function parseHash() {
   const raw = window.location.hash.replace(/^#\/?/, '')
@@ -14,6 +15,7 @@ function parseHash() {
 /**
  * Two-way sync between the URL hash and the active tab/selection, so
  * `#/avionics/FLC` is a shareable deep link and Back navigates between views.
+ * Tabs: `sim` (the default), `aircraft` and `avionics`.
  *
  * @param {Record<string, string[]>} validIds - allowed selection ids per tab
  */

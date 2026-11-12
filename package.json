@@ -1,5 +1,5 @@
 {
-  "name": "cessna-172-skyhawk-opus",
+  "name": "cessna-172-skyhawk",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,7 +8,9 @@
     "build": "vite build",
     "build:plane": "vite build --base=/plane/",
     "deploy:plane": "powershell -ExecutionPolicy Bypass -File ./scripts/deploy-gcs-plane.ps1",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",
@@ -18,11 +20,16 @@
     "three": "^0.186.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
     "tailwindcss": "^4.3.3",
-    "vite": "^8.3.0"
+    "vite": "^8.3.0",
+    "vitest": "^5.1.0"
   }
 }

@@ -1,4 +1,5 @@
 const TABS = [
+  { id: 'sim', label: 'Flight Sim', hint: 'Fly the Skyhawk' },
   { id: 'aircraft', label: 'Aircraft View', hint: 'Exploded airframe' },
   { id: 'avionics', label: 'Avionics View', hint: 'GFC 700 autopilot' },
 ]

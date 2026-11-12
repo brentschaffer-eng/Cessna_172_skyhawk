@@ -7,6 +7,12 @@ steps:
     entrypoint: npm
     args: ['ci', '--no-audit', '--no-fund']
 
+  # A failing test or lint error stops the deploy before anything is built or uploaded.
+  - id: check
+    name: 'node:22'
+    entrypoint: bash
+    args: ['-c', 'npm run lint && npm test']
+
   - id: build
     name: 'node:22'
     entrypoint: npm

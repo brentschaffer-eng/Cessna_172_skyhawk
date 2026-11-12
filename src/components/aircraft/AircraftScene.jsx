@@ -1,8 +1,8 @@
-import { Suspense, useState, useEffect, useLayoutEffect, useRef } from 'react'
-import { Canvas, useThree } from '@react-three/fiber'
+import { Suspense, memo, useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-three/drei'
 import { ExplodedAircraft } from './ExplodedAircraft.jsx'
-import { TextureLoader, SRGBColorSpace, DoubleSide } from 'three'
+import { TextureLoader, SRGBColorSpace, DoubleSide, PlaneGeometry } from 'three'
 
 const SKY_COLOR = '#6ba3ff'
 const UNITS_PER_NM = 400
@@ -17,6 +17,36 @@ const TILE_RADIUS = 3
 const NEAR_LAYER_ZOOM_STEPS = 3
 // Extra distance for the orbit camera, which can sit up to 50 units from the aircraft.
 const CAMERA_MARGIN = 50
+// Calgary, used when the scene is shown without a simulation (the airframe walkthrough).
+const DEFAULT_ORIGIN = { lat: 51.1215, lon: -114.0076 }
+
+const DEG = Math.PI / 180
+
+/**
+ * Where the aircraft is right now, for the frame loop. Reads the live simulation state from
+ * `simRef` (no React render involved); without one, the aircraft is parked at the origin.
+ */
+function readPose(simRef, origin) {
+  const s = simRef?.current
+  if (!s) return { height: 0, heading: 0, pitch: 0, bank: 0, lat: origin.lat, lon: origin.lon }
+  return {
+    // Scene units above the field: 10 ft of altitude per unit.
+    height: Math.max(0, s.altitude - s.runway.elevation) / 10,
+    heading: s.heading,
+    pitch: s.pitch,
+    bank: s.bank,
+    lat: origin.lat + s.y / 60,
+    lon: origin.lon + s.x / (60 * Math.cos(origin.lat * DEG)),
+  }
+}
+
+// Visibility grows with height so the ground stays in view all the way to the horizon;
+// at ground level these match the original 20/150 haze.
+const fogNearAt = (height) => 20 + 3 * height
+const fogFarAt = (height) => 150 + 20 * height
+
+// Every tile is the same flat square, scaled to size, so they can share one geometry.
+const TILE_GEOMETRY = new PlaneGeometry(1, 1)
 
 function MapTile({ tx, ty, z, dx, dy, size, renderOrder }) {
   const [texture, setTexture] = useState(null)
@@ -29,7 +59,7 @@ function MapTile({ tx, ty, z, dx, dy, size, renderOrder }) {
     let loaded = null
     let cancelled = false
     loader.load(
-      url, 
+      url,
       (tex) => {
         if (cancelled) {
           tex.dispose()
@@ -55,8 +85,12 @@ function MapTile({ tx, ty, z, dx, dy, size, renderOrder }) {
   }, [tx, ty, z])
 
   return (
-    <mesh position={[dx * size + size / 2, -dy * size - size / 2, 0]} renderOrder={renderOrder}>
-      <planeGeometry args={[size, size, 16, 16]} />
+    <mesh
+      geometry={TILE_GEOMETRY}
+      position={[dx * size + size / 2, -dy * size - size / 2, 0]}
+      scale={[size, size, 1]}
+      renderOrder={renderOrder}
+    >
       <meshBasicMaterial
         key={texture ? 'tex' : 'notex'}
         map={texture || null}
@@ -71,55 +105,72 @@ function MapTile({ tx, ty, z, dx, dy, size, renderOrder }) {
 }
 
 function tileSizeAt(z, lat) {
-  const tileWidthNm = (360 / Math.pow(2, z)) * 60 * Math.cos(lat * Math.PI / 180)
+  const tileWidthNm = (360 / Math.pow(2, z)) * 60 * Math.cos(lat * DEG)
   return tileWidthNm * UNITS_PER_NM
 }
 
-// Picks the most detailed zoom whose tile grid still reaches `reach` units from the aircraft,
-// with a little hysteresis so the imagery doesn't flicker when hovering near a boundary.
-function useCoverageZoom(reach, lat) {
-  const zoomRef = useRef(MAX_ZOOM)
-  const covers = (z, margin = 1) => TILE_RADIUS * tileSizeAt(z, lat) >= reach * margin
+/** Fractional slippy-map tile coordinates of a position at zoom `z` (Web Mercator). */
+function tileCoords(z, lat, lon) {
+  const scale = Math.pow(2, z)
+  const x = ((lon + 180) / 360) * scale
+  const y = ((1 - Math.log(Math.tan(lat * DEG) + 1 / Math.cos(lat * DEG)) / Math.PI) / 2) * scale
+  return { x, y }
+}
 
-  let z = zoomRef.current
+// Picks the most detailed zoom whose tile grid still reaches `reach` units from the aircraft,
+// with a little hysteresis (relative to `current`) so the imagery doesn't flicker when
+// hovering near a boundary.
+function coverageZoom(current, reach, lat) {
+  const covers = (z, margin = 1) => TILE_RADIUS * tileSizeAt(z, lat) >= reach * margin
+  let z = current
   while (z > MIN_ZOOM && !covers(z)) z--
   while (z < MAX_ZOOM && covers(z + 1, 1.15)) z++
-  zoomRef.current = z
   return z
 }
 
-function TileLayer({ z, lat, lon, renderOrder }) {
-  const scale = Math.pow(2, z)
-  const exactTileX = (lon + 180) / 360 * scale
-  const exactTileY = (1 - Math.log(Math.tan(lat * Math.PI / 180) + 1 / Math.cos(lat * Math.PI / 180)) / Math.PI) / 2 * scale
+/**
+ * One zoom level of ground imagery. The grid slides under the aircraft every frame by moving
+ * the group; React only re-renders when the aircraft crosses into a different centre tile.
+ */
+function TileLayer({ z, simRef, origin, renderOrder }) {
+  const groupRef = useRef()
+  // The centre tile and the tile size it was laid out with; null until the first frame.
+  const [grid, setGrid] = useState(null)
 
-  const centerTileX = Math.floor(exactTileX)
-  const centerTileY = Math.floor(exactTileY)
-
-  const fracX = exactTileX - centerTileX
-  const fracY = exactTileY - centerTileY
-
-  const size = tileSizeAt(z, lat)
+  useFrame(() => {
+    const pose = readPose(simRef, origin)
+    const exact = tileCoords(z, pose.lat, pose.lon)
+    const x = Math.floor(exact.x)
+    const y = Math.floor(exact.y)
+    if (!grid || grid.x !== x || grid.y !== y) {
+      setGrid({ x, y, size: tileSizeAt(z, pose.lat) })
+    }
+    // Correct even on the frame before a re-centre lands, because it is relative to `grid`.
+    if (grid) groupRef.current.position.set(-(exact.x - grid.x) * grid.size, (exact.y - grid.y) * grid.size, 0)
+  })
 
   const tiles = []
-  for (let dx = -TILE_RADIUS; dx <= TILE_RADIUS; dx++) {
-    for (let dy = -TILE_RADIUS; dy <= TILE_RADIUS; dy++) {
-      const ty = centerTileY + dy
-      if (ty < 0 || ty >= scale) continue
-      // Wrap across the antimeridian.
-      const tx = (((centerTileX + dx) % scale) + scale) % scale
-      tiles.push({ tx, ty, dx, dy })
+  if (grid) {
+    const scale = Math.pow(2, z)
+    for (let dx = -TILE_RADIUS; dx <= TILE_RADIUS; dx++) {
+      for (let dy = -TILE_RADIUS; dy <= TILE_RADIUS; dy++) {
+        const ty = grid.y + dy
+        if (ty < 0 || ty >= scale) continue
+        // Wrap across the antimeridian.
+        const tx = (((grid.x + dx) % scale) + scale) % scale
+        tiles.push({ tx, ty, dx, dy })
+      }
     }
   }
 
   return (
-    <group position={[-fracX * size, fracY * size, 0]}>
-      {tiles.map(t => (
-        <MapTile 
-          key={`${z}-${t.tx}-${t.ty}`} 
-          tx={t.tx} ty={t.ty} z={z} 
-          dx={t.dx} dy={t.dy} 
-          size={size} 
+    <group ref={groupRef}>
+      {tiles.map((t) => (
+        <MapTile
+          key={`${z}-${t.tx}-${t.ty}`}
+          tx={t.tx} ty={t.ty} z={z}
+          dx={t.dx} dy={t.dy}
+          size={grid.size}
           renderOrder={renderOrder}
         />
       ))}
@@ -129,25 +180,52 @@ function TileLayer({ z, lat, lon, renderOrder }) {
 
 // A detailed layer under the aircraft plus a coarse layer that reaches the horizon, with
 // zoom levels chosen from how far the ground must be visible at the current height.
-function SlippyMap({ heading, lat, lon, groundY, viewDistance }) {
-  const farZoom = useCoverageZoom(viewDistance + CAMERA_MARGIN, lat)
+function SlippyMap({ simRef, origin }) {
+  const groupRef = useRef()
+  const [farZoom, setFarZoom] = useState(MAX_ZOOM)
   const nearZoom = Math.min(MAX_ZOOM, farZoom + NEAR_LAYER_ZOOM_STEPS)
 
+  useFrame(() => {
+    const pose = readPose(simRef, origin)
+    // The world turns under the aircraft, which always points down -Z.
+    groupRef.current.rotation.z = pose.heading * DEG
+    // Fog is measured along the view axis, so cover extra to keep the haze edge off-screen.
+    const reach = fogFarAt(pose.height) * 1.3 + CAMERA_MARGIN
+    const next = coverageZoom(farZoom, reach, pose.lat)
+    if (next !== farZoom) setFarZoom(next)
+  })
+
   return (
-    <group position={[0, groundY, 0]} rotation={[-Math.PI / 2, 0, (heading * Math.PI) / 180]}>
-      {farZoom !== nearZoom && <TileLayer z={farZoom} lat={lat} lon={lon} renderOrder={-2} />}
-      <TileLayer z={nearZoom} lat={lat} lon={lon} renderOrder={-1} />
+    <group ref={groupRef} rotation={[-Math.PI / 2, 0, 0]}>
+      {farZoom !== nearZoom && (
+        <TileLayer key={farZoom} z={farZoom} simRef={simRef} origin={origin} renderOrder={-2} />
+      )}
+      <TileLayer key={nearZoom} z={nearZoom} simRef={simRef} origin={origin} renderOrder={-1} />
     </group>
   )
 }
 
-function CameraRange({ far }) {
-  const camera = useThree((state) => state.camera)
-  useEffect(() => {
-    camera.far = far
-    camera.updateProjectionMatrix()
-  }, [camera, far])
-  return null
+/** Drops the ground away as the aircraft climbs, and opens up the haze and far plane with it. */
+function Ground({ simRef, origin, children }) {
+  const groupRef = useRef()
+
+  useFrame(({ camera, scene }) => {
+    const { height } = readPose(simRef, origin)
+    groupRef.current.position.y = AIRCRAFT_GROUND_Y - height
+
+    const fogFar = fogFarAt(height)
+    if (scene.fog) {
+      scene.fog.near = fogNearAt(height)
+      scene.fog.far = fogFar
+    }
+    const cameraFar = fogFar * 1.5 + 1000
+    if (camera.far !== cameraFar) {
+      camera.far = cameraFar
+      camera.updateProjectionMatrix()
+    }
+  })
+
+  return <group ref={groupRef} position={[0, AIRCRAFT_GROUND_Y, 0]}>{children}</group>
 }
 
 /**
@@ -158,6 +236,8 @@ function CameraRange({ far }) {
 function ViewInset({ right }) {
   const camera = useThree((state) => state.camera)
   const size = useThree((state) => state.size)
+  // three.js cameras are mutable by design; this is the supported way to reframe one.
+  /* eslint-disable react-hooks/immutability */
   useLayoutEffect(() => {
     if (right > 0 && size.width > right * 2) {
       // r3f resets aspect to the canvas size on resize; this effect re-runs afterwards.
@@ -169,16 +249,27 @@ function ViewInset({ right }) {
     }
     camera.updateProjectionMatrix()
   }, [camera, size.width, size.height, right])
+  /* eslint-enable react-hooks/immutability */
   return null
 }
 
-export function AircraftScene({ selectedId, onSelect, reducedMotion, controls, airportElevation, airportLat, airportLon, viewInsetRight = 0 }) {
-  const heightAboveField = Math.max(0, (controls?.apAltitude || 3000) - (airportElevation || 3557)) / 10
-  const groundY = AIRCRAFT_GROUND_Y - heightAboveField
-  // Visibility grows with height so the ground stays in view all the way to the horizon;
-  // at ground level these match the original 20/150 haze.
-  const fogNear = 20 + 3 * heightAboveField
-  const fogFar = 150 + 20 * heightAboveField
+/**
+ * The 3D view. In the simulator, pass `simRef` (the live simulation state) and the airport's
+ * position as `originLat` / `originLon`: attitude, height and ground position are then read
+ * from the ref every frame, so flying never re-renders this component. It is memoised for
+ * that reason; keep its props stable.
+ */
+export const AircraftScene = memo(function AircraftScene({
+  selectedId,
+  onSelect,
+  reducedMotion,
+  controls,
+  simRef,
+  originLat = DEFAULT_ORIGIN.lat,
+  originLon = DEFAULT_ORIGIN.lon,
+  viewInsetRight = 0,
+}) {
+  const origin = useMemo(() => ({ lat: originLat, lon: originLon }), [originLat, originLon])
 
   return (
     <Canvas
@@ -188,8 +279,7 @@ export function AircraftScene({ selectedId, onSelect, reducedMotion, controls, a
       onPointerMissed={() => onSelect(null)}
     >
       <color attach="background" args={[SKY_COLOR]} />
-      <fog attach="fog" args={[SKY_COLOR]} near={fogNear} far={fogFar} />
-      <CameraRange far={fogFar * 1.5 + 1000} />
+      <fog attach="fog" args={[SKY_COLOR, fogNearAt(0), fogFarAt(0)]} />
       <ViewInset right={viewInsetRight} />
 
       <hemisphereLight args={['#dfeaff', '#5a5040', 0.45]} />
@@ -225,16 +315,12 @@ export function AircraftScene({ selectedId, onSelect, reducedMotion, controls, a
           onSelect={onSelect}
           reducedMotion={reducedMotion}
           controls={controls}
+          simRef={simRef}
         />
-        <ContactShadows position={[0, groundY + 0.02, 0]} opacity={0.65} scale={16} blur={2.2} far={6} resolution={1024} />
-        <SlippyMap 
-          heading={controls?.apHeading || 0} 
-          lat={(airportLat || 51.1215) + (controls?.apY || 0) / 60}
-          lon={(airportLon || -114.0076) + (controls?.apX || 0) / (60 * Math.cos((airportLat || 51.1215) * Math.PI / 180))}
-          groundY={groundY}
-          // Fog is measured along the view axis, so cover extra to keep the haze edge off-screen.
-          viewDistance={fogFar * 1.3}
-        />
+        <Ground simRef={simRef} origin={origin}>
+          <ContactShadows position={[0, 0.02, 0]} opacity={0.65} scale={16} blur={2.2} far={6} resolution={1024} />
+          <SlippyMap simRef={simRef} origin={origin} />
+        </Ground>
       </Suspense>
 
       <OrbitControls
@@ -249,4 +335,4 @@ export function AircraftScene({ selectedId, onSelect, reducedMotion, controls, a
       />
     </Canvas>
   )
-}
+})
