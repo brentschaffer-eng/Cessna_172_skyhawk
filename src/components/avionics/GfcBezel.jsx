@@ -1,5 +1,12 @@
 import { useState } from 'react'
-import { BEZEL_ROWS, MODE_BY_ID } from '../../data/autopilotModes.js'
+
+/** AFCS keys on the left edge of the Skyhawk's GDU PFD bezel, top to bottom, in pairs. */
+const BEZEL_ROWS = [
+  ['AP', 'FD', 'APR', 'BC'],
+  ['HDG', 'ALT', 'VS', 'FLC'],
+  ['NAV', 'VNV', 'UP', 'DN'],
+]
+const KEY_LABELS = { UP: 'NOSE UP', DN: 'NOSE DN' }
 
 /** Maps machine state onto the lamp each bezel key shows: off, white armed, green active. */
 function lampState(id, ap) {
@@ -32,21 +39,17 @@ const LAMP_CLASS = {
     'border-[var(--color-mode-active)] bg-gradient-to-b from-[#2f5c43] to-[#1d3a2b] text-[var(--color-mode-active)] shadow-[0_0_12px_-2px_var(--color-mode-active)]',
 }
 
-function ModeButton({ mode, lamp, focused, onPress, onFocus }) {
+function ModeButton({ id, lamp, onPress }) {
+  const label = KEY_LABELS[id] ?? id
   return (
     <button
       type="button"
       aria-pressed={lamp !== 'off'}
-      aria-label={lamp === 'off' ? mode.label : `${mode.label}, ${lamp}`}
-      onClick={() => {
-        onPress(mode.id)
-        onFocus(mode.id)
-      }}
-      className={`flex h-9 flex-col items-center justify-center rounded-md border font-[family-name:var(--font-instrument)] text-xs font-bold tracking-wider transition-all active:translate-y-px ${LAMP_CLASS[lamp]} ${
-        focused ? 'ring-2 ring-[var(--color-instrument)] ring-offset-2 ring-offset-[#0d1117]' : ''
-      }`}
+      aria-label={lamp === 'off' ? label : `${label}, ${lamp}`}
+      onClick={() => onPress(id)}
+      className={`flex h-9 flex-col items-center justify-center rounded-md border font-[family-name:var(--font-instrument)] text-xs font-bold tracking-wider transition-all active:translate-y-px ${LAMP_CLASS[lamp]}`}
     >
-      <span className="leading-tight">{mode.label}</span>
+      <span className="leading-tight">{label}</span>
       {lamp !== 'off' && (
         <span className="text-[8px] font-semibold leading-none tracking-widest opacity-80" aria-hidden="true">
           {lamp === 'armed' ? 'ARMED' : 'ACTIVE'}
@@ -56,7 +59,7 @@ function ModeButton({ mode, lamp, focused, onPress, onFocus }) {
   )
 }
 
-export function GfcBezel({ ap, selectedId, onPress, onSelect, children }) {
+export function GfcBezel({ ap, onPress, children }) {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -85,11 +88,9 @@ export function GfcBezel({ ap, selectedId, onPress, onSelect, children }) {
                 {row.map((id) => (
                   <ModeButton
                     key={id}
-                    mode={MODE_BY_ID[id]}
+                    id={id}
                     lamp={lampState(id, ap)}
-                    focused={selectedId === id}
                     onPress={onPress}
-                    onFocus={onSelect}
                   />
                 ))}
               </div>

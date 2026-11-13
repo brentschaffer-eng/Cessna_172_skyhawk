@@ -96,11 +96,11 @@ export function Wings({ flapsDown = false, rollInput = 0 }) {
             />
             <mesh position={[strutTop.x, strutTop.y - 0.01, strutTop.z]} scale={[0.6, 0.5, 1.3]} castShadow>
               <sphereGeometry args={[0.07, 16, 12]} />
-              <meshPhysicalMaterial {...PAINT} transparent />
+              <meshPhysicalMaterial {...PAINT} />
             </mesh>
             <mesh position={[sign * 0.56, -0.42, -1.42]} scale={[0.5, 0.7, 1.4]} castShadow>
               <sphereGeometry args={[0.07, 16, 12]} />
-              <meshPhysicalMaterial {...PAINT} transparent />
+              <meshPhysicalMaterial {...PAINT} />
             </mesh>
 
             {/* Fuel filler cap near the root of each wing. */}
@@ -109,7 +109,7 @@ export function Wings({ flapsDown = false, rollInput = 0 }) {
               return (
                 <mesh position={toArray(p)}>
                   <cylinderGeometry args={[0.04, 0.045, 0.014, 20]} />
-                  <meshPhysicalMaterial {...CHROME} transparent />
+                  <meshPhysicalMaterial {...CHROME} />
                 </mesh>
               )
             })()}
@@ -127,7 +127,7 @@ export function Wings({ flapsDown = false, rollInput = 0 }) {
         return (
           <mesh position={[-1.55, s.le[1] + 0.005, s.le[2] + 0.012]}>
             <boxGeometry args={[0.32, 0.08, 0.02]} />
-            <meshPhysicalMaterial {...GLASS} color="#dfe8ef" emissive="#fff6d8" emissiveIntensity={0.4} transparent />
+            <meshPhysicalMaterial {...GLASS} color="#dfe8ef" emissive="#fff6d8" emissiveIntensity={0.4} />
           </mesh>
         )
       })()}
@@ -136,7 +136,7 @@ export function Wings({ flapsDown = false, rollInput = 0 }) {
         return (
           <mesh position={[-1.0, s.le[1] - 0.005, s.le[2] + 0.006]}>
             <boxGeometry args={[0.07, 0.02, 0.012]} />
-            <meshPhysicalMaterial {...SATIN_BLACK} transparent />
+            <meshPhysicalMaterial {...SATIN_BLACK} />
           </mesh>
         )
       })()}

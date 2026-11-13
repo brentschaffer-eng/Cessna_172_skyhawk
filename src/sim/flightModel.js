@@ -51,9 +51,17 @@ const POWER_AVAILABLE_FPM = 1443
 const FPM_TO_KT_PER_SEC = 0.1882 // Converts excess power (as fpm) over speed (kt) into kt/s.
 const FLAP_DRAG_FACTOR = 1.35
 
-/** Stall and rotation speeds; full flaps lower both. */
+/** Stall speed in KIAS; full flaps lower it. Close to the C172S POH (48 clean, 40 with flaps 30°). */
 export const stallSpeed = (flapsDown) => (flapsDown ? 40 : 47)
-export const rotateSpeed = (flapsDown) => (flapsDown ? 55 : 65)
+
+/**
+ * Rotation speed, C172S POH normal takeoff: rotate at 55 KIAS. The wheels stay on the runway
+ * below it however far back the yoke is held.
+ */
+export const VR = 55
+
+/** Extra lift from the flaps: the same lift at a lower angle of attack, (47 / 40)² ≈ 1.38. */
+const FLAP_LIFT_FACTOR = (stallSpeed(false) / stallSpeed(true)) ** 2
 
 /** Parasite drag power: grows with the cube of speed, and extended flaps add to it. */
 function parasiteFpm(v, flapsDown) {
@@ -87,15 +95,15 @@ function groundRollAccel(v, rpm, flapsDown) {
   return thrust - ROLLING_RESISTANCE - (rpm < 1000 ? IDLE_BRAKING : 0)
 }
 
-/** Angle of attack needed at a given airspeed; pitch = flight path + AoA. */
-export function alphaDeg(v) {
-  return 2.5 * (100 / Math.max(v, 40)) ** 2
+/** Angle of attack needed at a given airspeed; pitch = flight path + AoA. Flaps lower it. */
+export function alphaDeg(v, flapsDown = false) {
+  return (2.5 * (100 / Math.max(v, 40)) ** 2) / (flapsDown ? FLAP_LIFT_FACTOR : 1)
 }
 
 /** The pitch attitude that produces a given vertical speed at the current airspeed. */
-export function pitchForVs(vs, v) {
+export function pitchForVs(vs, v, flapsDown = false) {
   const sinGamma = clamp(vs / (Math.max(v, 40) * KT_TO_FPM), -0.35, 0.35)
-  return deg(Math.asin(sinGamma)) + alphaDeg(v)
+  return deg(Math.asin(sinGamma)) + alphaDeg(v, flapsDown)
 }
 
 export function standardRateBank(v) {
@@ -229,17 +237,17 @@ export function flightDirectorCommand(s, nav) {
   let pitch
   switch (s.verticalActive) {
     case 'VS':
-      pitch = pitchForVs(s.vsRef, s.airspeed)
+      pitch = pitchForVs(s.vsRef, s.airspeed, s.flapsDown)
       break
     case 'FLC':
-      pitch = pitchForVs(flcVs(s), s.airspeed)
+      pitch = pitchForVs(flcVs(s), s.airspeed, s.flapsDown)
       break
     case 'ALT':
     case 'ALTS':
-      pitch = pitchForVs(altitudeHoldVs(s), s.airspeed)
+      pitch = pitchForVs(altitudeHoldVs(s), s.airspeed, s.flapsDown)
       break
     case 'GS':
-      pitch = pitchForVs(glideslopeVs(s, nav), s.airspeed)
+      pitch = pitchForVs(glideslopeVs(s, nav), s.airspeed, s.flapsDown)
       break
     default:
       pitch = s.pitchRef
@@ -282,17 +290,20 @@ export function stepAircraft(s, dt, cmd, pilot) {
 
   const v = s.airspeed
   const fieldElevation = s.runway.elevation
+  const onGround = s.altitude <= fieldElevation
   // Past the critical angle of attack the nose falls through no matter what.
   if (v < stallSpeed(s.flapsDown) && s.altitude > fieldElevation + 10) pitch -= 8 * dt
+  // Below Vr the elevator cannot raise the nosewheel: the nose can only come down.
+  if (onGround && v < VR) pitch = Math.max(0, Math.min(pitch, s.pitch) - 5 * dt)
 
   bank = clamp(bank, -60, 60)
   pitch = clamp(pitch, -25, 25)
 
-  const gamma = pitch - alphaDeg(v)
+  const gamma = pitch - alphaDeg(v, s.flapsDown)
   let vs = v * KT_TO_FPM * Math.sin(rad(gamma))
 
-  // Prevent falling through the ground
-  const rolling = s.altitude <= fieldElevation && vs <= 0
+  // The wheels hold the airplane on the runway until it is flying fast enough to climb away.
+  const rolling = onGround && (vs <= 0 || v < VR)
   if (rolling) {
     vs = 0
     pitch = Math.max(pitch, 0)

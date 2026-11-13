@@ -20,15 +20,15 @@ function Wheel({ radius, width, hubRadius }) {
     <group>
       <mesh rotation={[0, Math.PI / 2, 0]} castShadow receiveShadow>
         <torusGeometry args={[radius - tube, tube, 24, 56]} />
-        <meshPhysicalMaterial {...RUBBER} transparent />
+        <meshPhysicalMaterial {...RUBBER} />
       </mesh>
       <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
         <cylinderGeometry args={[hubRadius, hubRadius, width * 0.82, 32]} />
-        <meshPhysicalMaterial {...ALUMINIUM} transparent />
+        <meshPhysicalMaterial {...ALUMINIUM} />
       </mesh>
       <mesh rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[hubRadius * 0.35, hubRadius * 0.35, width * 0.9, 20]} />
-        <meshPhysicalMaterial {...CHROME} transparent />
+        <meshPhysicalMaterial {...CHROME} />
       </mesh>
     </group>
   )
@@ -58,14 +58,14 @@ export function LandingGear() {
             <Strut from={[side * 0.74, -0.73, -1.61]} to={[side * 0.74, -0.73, -1.43]} radius={0.012} material={STEEL} />
             <mesh position={[side * 0.74, -0.715, -1.41]} castShadow>
               <boxGeometry args={[0.12, 0.012, 0.09]} />
-              <meshPhysicalMaterial {...STEEL} transparent />
+              <meshPhysicalMaterial {...STEEL} />
             </mesh>
 
             <group position={axle}>
               <Wheel radius={MAIN_AXLE.tire} width={0.17} hubRadius={0.12} />
               <mesh position={[-side * 0.1, 0, 0]} rotation={[0, 0, Math.PI / 2]}>
                 <cylinderGeometry args={[0.1, 0.1, 0.012, 32]} />
-                <meshPhysicalMaterial {...STEEL} transparent />
+                <meshPhysicalMaterial {...STEEL} />
               </mesh>
               <Part geometry={pant} />
             </group>
@@ -80,12 +80,12 @@ export function LandingGear() {
       <Strut from={[0, -0.72, -3.15]} to={[0, -0.86, -3.24]} radius={0.016} flatten={0.6} material={STEEL} />
       <mesh position={[0, -0.93, -3.3]} castShadow>
         <boxGeometry args={[0.2, 0.04, 0.12]} />
-        <meshPhysicalMaterial {...STEEL} transparent />
+        <meshPhysicalMaterial {...STEEL} />
       </mesh>
       {[-1, 1].map((side) => (
         <mesh key={side} position={[side * 0.085, (NOSE_AXLE.y - 0.93) / 2, NOSE_AXLE.z]} castShadow>
           <boxGeometry args={[0.022, Math.abs(NOSE_AXLE.y + 0.93) + 0.04, 0.08]} />
-          <meshPhysicalMaterial {...STEEL} transparent />
+          <meshPhysicalMaterial {...STEEL} />
         </mesh>
       ))}
       <group position={[NOSE_AXLE.x, NOSE_AXLE.y, NOSE_AXLE.z]}>

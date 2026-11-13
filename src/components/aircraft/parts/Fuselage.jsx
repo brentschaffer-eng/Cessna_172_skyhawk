@@ -71,18 +71,18 @@ export function Fuselage() {
       {[0.85, 1.45].map((z) => (
         <mesh key={z} position={[0, topAt(z) + 0.09, z + 0.02]} rotation={[0.35, 0, 0]} castShadow>
           <boxGeometry args={[0.012, 0.2, 0.08]} />
-          <meshPhysicalMaterial {...SATIN_BLACK} transparent />
+          <meshPhysicalMaterial {...SATIN_BLACK} />
         </mesh>
       ))}
       <mesh position={[0, bottomAt(-0.6) - 0.04, -0.6]} castShadow>
         <boxGeometry args={[0.01, 0.08, 0.05]} />
-        <meshPhysicalMaterial {...SATIN_BLACK} transparent />
+        <meshPhysicalMaterial {...SATIN_BLACK} />
       </mesh>
 
       {/* Tail tie-down ring. */}
       <mesh position={[0, bottomAt(3.25) - 0.04, 3.25]} rotation={[0, Math.PI / 2, 0]}>
         <torusGeometry args={[0.03, 0.007, 8, 20]} />
-        <meshPhysicalMaterial {...STEEL} transparent />
+        <meshPhysicalMaterial {...STEEL} />
       </mesh>
     </group>
   )

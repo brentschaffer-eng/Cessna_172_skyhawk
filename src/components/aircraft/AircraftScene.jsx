@@ -1,12 +1,12 @@
 import { Suspense, memo, useState, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ContactShadows, Environment, Lightformer, OrbitControls } from '@react-three/drei'
-import { ExplodedAircraft } from './ExplodedAircraft.jsx'
+import { Aircraft } from './Aircraft.jsx'
 import { TextureLoader, SRGBColorSpace, DoubleSide, PlaneGeometry } from 'three'
 
 const SKY_COLOR = '#6ba3ff'
 const UNITS_PER_NM = 400
-// Wheel contact height: the model's tyres touch y = -1.25, and ExplodedAircraft lifts it by 0.35.
+// Wheel contact height: the model's tyres touch y = -1.25, and Aircraft lifts it by 0.35.
 const AIRCRAFT_GROUND_Y = -0.9
 const MAX_ZOOM = 16
 const MIN_ZOOM = 3
@@ -17,7 +17,7 @@ const TILE_RADIUS = 3
 const NEAR_LAYER_ZOOM_STEPS = 3
 // Extra distance for the orbit camera, which can sit up to 50 units from the aircraft.
 const CAMERA_MARGIN = 50
-// Calgary, used when the scene is shown without a simulation (the airframe walkthrough).
+// Calgary, used when no airport position is passed in.
 const DEFAULT_ORIGIN = { lat: 51.1215, lon: -114.0076 }
 
 const DEG = Math.PI / 180
@@ -260,9 +260,6 @@ function ViewInset({ right }) {
  * that reason; keep its props stable.
  */
 export const AircraftScene = memo(function AircraftScene({
-  selectedId,
-  onSelect,
-  reducedMotion,
   controls,
   simRef,
   originLat = DEFAULT_ORIGIN.lat,
@@ -276,7 +273,6 @@ export const AircraftScene = memo(function AircraftScene({
       shadows
       dpr={[1, 2]}
       camera={{ position: [8.5, 4.2, 9.5], fov: 42 }}
-      onPointerMissed={() => onSelect(null)}
     >
       <color attach="background" args={[SKY_COLOR]} />
       <fog attach="fog" args={[SKY_COLOR, fogNearAt(0), fogFarAt(0)]} />
@@ -310,13 +306,7 @@ export const AircraftScene = memo(function AircraftScene({
       </Environment>
 
       <Suspense fallback={null}>
-        <ExplodedAircraft
-          selectedId={selectedId}
-          onSelect={onSelect}
-          reducedMotion={reducedMotion}
-          controls={controls}
-          simRef={simRef}
-        />
+        <Aircraft controls={controls} simRef={simRef} />
         <Ground simRef={simRef} origin={origin}>
           <ContactShadows position={[0, 0.02, 0]} opacity={0.65} scale={16} blur={2.2} far={6} resolution={1024} />
           <SlippyMap simRef={simRef} origin={origin} />

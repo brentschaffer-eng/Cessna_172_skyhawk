@@ -45,7 +45,7 @@ export function useSimulation(createInitialState, inputsRef) {
       }
       if (time - lastPublish >= PUBLISH_INTERVAL_MS) {
         lastPublish = time
-        setSnapshot(simRef.current) // A no-op for React when nothing changed (paused).
+        setSnapshot(simRef.current) // A no-op for React when nothing changed (a message is showing).
       }
       frameId = requestAnimationFrame(loop)
     }

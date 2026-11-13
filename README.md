@@ -1,28 +1,20 @@
-# Cessna 172 Skyhawk Trainer
+# Cessna 172 Skyhawk Flight Simulator
 
 <img src="public/favicon.svg" alt="Cessna 172 Skyhawk icon" width="96" align="right">
 
-An interactive, browser-based training aid for the Cessna 172 Skyhawk, built with React, Three.js, and Tailwind CSS.
+A browser-based flight simulator for the Cessna 172 Skyhawk, built with React, Three.js, and Tailwind CSS.
 
 Live at **https://beesone.ca/plane/**
 
 ## Features
 
-- **Flight simulator** – a 3D Cessna 172 flown from one of four Canadian airports, each with satellite ground imagery:
-  - Vancouver (CYVR), runway 08R
-  - Calgary (CYYC), runway 35R
-  - Edmonton (CYEG), runway 02
-  - Winnipeg (CYWG), runway 36
+- **Flight simulator** – a 3D Cessna 172 flown from the longest runway at 29 Canadian airports, covering every provincial and territorial capital and the major cities, each with satellite ground imagery. The list lives in `src/data/airports.js`.
 - **Garmin G1000 PFD** – attitude indicator, airspeed/altitude tapes, HSI, and AFCS status box.
 - **GFC 700 autopilot** – mode controller bezel with heading bug, altitude preselect, and target vertical speed.
 - **Manual controls** – throttle, flaps, arrow-key yoke (when the autopilot is off), and an airport map.
-- **Takeoff assist** – hands off, the aircraft rotates at Vr and the autopilot engages in the climb. Touching the yoke keys or disconnecting the autopilot hands the flight back to you.
-- **Airframe walkthrough** (`#/aircraft`) – an exploded 3D model with a narrated description of each assembly.
-- **Autopilot tutor** (`#/avionics`) – the PFD and mode controller with an explanation of every GFC 700 mode, starting airborne on an ILS intercept.
+- **Takeoff** – the wheels stay on the runway below Vr, 55 KIAS (C172S POH). With the flaps up, pull back (Down arrow) to rotate. With the flaps down and hands off, the aircraft rotates itself at Vr and the autopilot engages in the climb; touching the yoke keys or disconnecting the autopilot hands the flight back to you.
 
-The simulator is the landing page. The other two pages open from the buttons at the top left of the 3D view and load on demand.
-
-Ground imagery is streamed from Esri World Imagery, and the map from OpenStreetMap; both need an internet connection.
+Ground imagery is streamed from Esri World Imagery, and the map from OpenStreetMap; both need an internet connection. Runway positions come from [OurAirports](https://ourairports.com/data/) (public domain) and [OpenStreetMap](https://www.openstreetmap.org/copyright) (© OpenStreetMap contributors, ODbL).
 
 ## Getting started
 
@@ -58,14 +50,13 @@ scripts/
   deploy-gcs-plane.ps1 Manual Google Cloud Storage deploy script
 cloudbuild.yaml        Automatic deploy on push to main (Cloud Build)
 src/
-  App.jsx              Hash routing between the simulator and the two tutors
+  App.jsx              Renders the simulator
   components/
     FlightSimView.jsx  Main simulator screen
-    aircraft/          3D aircraft model, scene and exploded-view walkthrough
-    avionics/          G1000 PFD, GFC 700 bezel and autopilot tutor
-    layout/            Page shell and tabs for the tutors
-    speech/            Text-to-speech narration
-  data/                Aircraft part and autopilot mode descriptions
+    aircraft/          3D aircraft model and scene
+    avionics/          G1000 PFD and GFC 700 bezel
+    controls/          Throttle quadrant
+  data/airports.js     Airports and runways the simulator can start from
   hooks/useSimulation.js  Runs the simulation each frame, outside React rendering
   sim/flightModel.js   Simplified flight dynamics (pure functions)
   state/               Autopilot reducer (pure; the runway in use is part of the state)

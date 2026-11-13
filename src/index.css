@@ -45,10 +45,3 @@
     }
   }
 }
-
-@layer utilities {
-  /* Fades the bottom of scrolling text panels into the surrounding chrome. */
-  .mask-fade-b {
-    mask-image: linear-gradient(to bottom, black 90%, transparent 100%);
-  }
-}

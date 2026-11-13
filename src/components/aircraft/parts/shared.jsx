@@ -1,4 +1,3 @@
-import { useLayoutEffect, useRef } from 'react'
 import * as THREE from 'three'
 
 const gloss = { clearcoat: 0.75, clearcoatRoughness: 0.1 }
@@ -12,31 +11,21 @@ export const RUBBER = { color: '#1a1d21', metalness: 0, roughness: 0.9 }
 export const STEEL = { color: '#8c949d', metalness: 0.85, roughness: 0.32 }
 export const CHROME = { color: '#e6ebf0', metalness: 1, roughness: 0.1 }
 export const ALUMINIUM = { color: '#c3c9cf', metalness: 0.9, roughness: 0.28 }
-export const ENGINE_GREY = { color: '#4e5862', metalness: 0.55, roughness: 0.45 }
-export const CYLINDER = { color: '#6e7780', metalness: 0.7, roughness: 0.4 }
 export const EXHAUST = { color: '#6b5546', metalness: 0.75, roughness: 0.55 }
 export const SATIN_BLACK = { color: '#24282d', metalness: 0.3, roughness: 0.55 }
 export const PROP_TIP = { color: '#f2c230', metalness: 0.1, roughness: 0.4 }
 
 /**
  * Mesh with a physical material. `decal` skins sit a few millimetres proud of the body,
- * render both faces and win the depth test so they never shimmer. `baseOpacity` is read by
- * ExplodedAircraft's fade pass; it is written to userData so the part's highlight state survives.
+ * render both faces and win the depth test so they never shimmer.
  */
-export function Part({ geometry, material = PAINT, decal = false, baseOpacity, map, children, ...props }) {
-  const materialRef = useRef()
-  useLayoutEffect(() => {
-    if (baseOpacity !== undefined) materialRef.current.userData.baseOpacity = baseOpacity
-  }, [baseOpacity])
-
+export function Part({ geometry, material = PAINT, decal = false, map, children, ...props }) {
   return (
     <mesh geometry={geometry} castShadow={!decal} receiveShadow {...props}>
       {children}
       <meshPhysicalMaterial
-        ref={materialRef}
         {...material}
         map={map ?? null}
-        transparent
         alphaTest={map ? 0.4 : 0}
         side={decal ? THREE.DoubleSide : THREE.FrontSide}
         polygonOffset={decal}
@@ -47,12 +36,12 @@ export function Part({ geometry, material = PAINT, decal = false, baseOpacity, m
   )
 }
 
-/** Emissive lens for navigation, beacon and landing lights (excluded from the highlight glow). */
+/** Emissive lens for navigation, beacon and landing lights. */
 export function Lamp({ colour, intensity = 2, radius = 0.04, ...props }) {
   return (
     <mesh {...props}>
       <sphereGeometry args={[radius, 16, 12]} />
-      <meshStandardMaterial color={colour} emissive={colour} emissiveIntensity={intensity} toneMapped={false} transparent />
+      <meshStandardMaterial color={colour} emissive={colour} emissiveIntensity={intensity} toneMapped={false} />
     </mesh>
   )
 }
@@ -75,7 +64,7 @@ export function Strut({ from, to, radius = 0.04, radiusTop, flatten = 1, materia
   return (
     <mesh position={a.add(b).multiplyScalar(0.5)} quaternion={quaternion} scale={[flatten, 1, 1]} castShadow receiveShadow>
       <cylinderGeometry args={[radiusTop ?? radius, radius, length, segments]} />
-      <meshPhysicalMaterial {...material} transparent />
+      <meshPhysicalMaterial {...material} />
     </mesh>
   )
 }

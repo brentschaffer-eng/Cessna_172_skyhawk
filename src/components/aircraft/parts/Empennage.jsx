@@ -148,7 +148,7 @@ export function Empennage({ pitchInput = 0, yawInput = 0 }) {
       {/* Anti-collision beacon on the fin cap. */}
       <mesh position={[0, 1.49, 3.3]}>
         <cylinderGeometry args={[0.03, 0.04, 0.03, 16]} />
-        <meshPhysicalMaterial {...SATIN_BLACK} transparent />
+        <meshPhysicalMaterial {...SATIN_BLACK} />
       </mesh>
       <Lamp colour="#ff2a1a" radius={0.035} position={[0, 1.52, 3.3]} />
 
@@ -158,7 +158,7 @@ export function Empennage({ pitchInput = 0, yawInput = 0 }) {
       ))}
       <mesh position={[0, 1.36, 3.06]}>
         <boxGeometry args={[0.06, 0.04, 0.06]} />
-        <meshPhysicalMaterial {...PAINT} transparent />
+        <meshPhysicalMaterial {...PAINT} />
       </mesh>
     </group>
   )

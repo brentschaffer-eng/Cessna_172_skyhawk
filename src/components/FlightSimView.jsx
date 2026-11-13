@@ -4,7 +4,7 @@ import { Pfd } from './avionics/g1000/Pfd.jsx'
 import { GfcBezel } from './avionics/GfcBezel.jsx'
 import { ThrottleQuadrant } from './controls/ThrottleQuadrant.jsx'
 import { SimMessage } from './SimMessage.jsx'
-import { usePrefersReducedMotion } from '../hooks/usePrefersReducedMotion.js'
+import { AIRPORTS, AIRPORT_GROUPS, DEFAULT_AIRPORT } from '../data/airports.js'
 import { useSimulation } from '../hooks/useSimulation.js'
 
 // Three.js is most of the bundle; load it after the instruments are on screen.
@@ -21,15 +21,6 @@ const OVERLAY_PILL =
 const THROTTLE_CONSOLE_PX = 168
 const THROTTLE_VISIBLE_KEY = 'c172.throttleVisible'
 
-// lat/lon is the threshold of each airport's longest runway (OurAirports data); heading is TRUE.
-const AIRPORTS = [
-  { id: 'CYVR', name: 'Vancouver (CYVR)', elevation: 14, runway: { id: '08R', heading: 100.3, lengthFt: 11500 }, lat: 49.190102, lon: -123.208000 },
-  { id: 'CYYC', name: 'Calgary (CYYC)', elevation: 3557, runway: { id: '35R', heading: 360, lengthFt: 14000 }, lat: 51.110001, lon: -113.989998 },
-  { id: 'CYEG', name: 'Edmonton (CYEG)', elevation: 2373, runway: { id: '02', heading: 33.9, lengthFt: 11000 }, lat: 53.308899, lon: -113.596001 },
-  { id: 'CYWG', name: 'Winnipeg (CYWG)', elevation: 783, runway: { id: '36', heading: 9.3, lengthFt: 11000 }, lat: 49.895599, lon: -97.241699 },
-]
-const DEFAULT_AIRPORT = AIRPORTS[1]
-
 /** Roll a little past the threshold so the aircraft sits on pavement, not on the runway end. */
 const LINEUP_OFFSET_NM = 0.02
 
@@ -45,8 +36,6 @@ function lineUpAction(a) {
     y: LINEUP_OFFSET_NM * Math.cos(h),
   }
 }
-
-const NO_SELECTION = () => {}
 
 /** Arrow keys work the yoke: up pushes the nose down, down pulls it up, left and right roll. */
 const YOKE_KEYS = {
@@ -144,7 +133,6 @@ export function FlightSimView() {
     () => autopilotReducer(INITIAL_AP_STATE, lineUpAction(DEFAULT_AIRPORT)),
     inputsRef,
   )
-  const reducedMotion = usePrefersReducedMotion()
 
   const [flapsDown, setFlapsDown] = useState(false)
   const [airport, setAirport] = useState(DEFAULT_AIRPORT)
@@ -193,9 +181,7 @@ export function FlightSimView() {
             <Pfd ap={ap} />
             <GfcBezel
               ap={ap}
-              selectedId={null}
               onPress={(id) => dispatch({ type: 'press', id })}
-              onSelect={NO_SELECTION}
             >
               <div className="grid grid-cols-2 gap-6">
                 <div className="flex flex-col gap-1">
@@ -228,7 +214,13 @@ export function FlightSimView() {
                         dispatch(lineUpAction(a))
                       }}
                     >
-                      {AIRPORTS.map(a => <option key={a.id} value={a.id} className="bg-[var(--color-panel-raised)] text-slate-100">{a.name}</option>)}
+                      {AIRPORT_GROUPS.map((group) => (
+                        <optgroup key={group.region} label={group.region} className="bg-[var(--color-panel-raised)] text-slate-400">
+                          {group.airports.map((a) => (
+                            <option key={a.id} value={a.id} className="bg-[var(--color-panel-raised)] text-slate-100">{a.name}</option>
+                          ))}
+                        </optgroup>
+                      ))}
                     </select>
                   </label>
                 </div>
@@ -257,11 +249,6 @@ export function FlightSimView() {
           <div className="relative min-h-[520px] w-full overflow-hidden rounded-xl border border-[var(--color-panel-edge)] bg-[#6ba3ff] lg:h-full lg:min-h-0">
             {/* Overlays: the 3D view stays the centrepiece; controls float over its edges. */}
             <div className="pointer-events-none absolute inset-3 z-20 flex items-start gap-3">
-              <nav aria-label="Training modules" className="flex flex-col gap-2 xl:flex-row">
-                <a href="#/aircraft" className={OVERLAY_PILL} title="Exploded airframe walkthrough">Airframe</a>
-                <a href="#/avionics" className={OVERLAY_PILL} title="GFC 700 autopilot mode tutor">AP tutor</a>
-              </nav>
-
               <button type="button" onClick={resetFlight} className={`${OVERLAY_PILL} ml-auto`} title="Put the aircraft back on the runway">
                 Reset
               </button>
@@ -355,9 +342,6 @@ export function FlightSimView() {
 
             <Suspense fallback={<p className="flex h-full items-center justify-center text-sm text-white/85">Loading 3D Flight Simulator...</p>}>
               <AircraftScene
-                selectedId={null}
-                onSelect={NO_SELECTION}
-                reducedMotion={reducedMotion}
                 controls={controls}
                 simRef={simRef}
                 originLat={airport.lat}
